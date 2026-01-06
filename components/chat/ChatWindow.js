@@ -35,12 +35,7 @@ export default function ChatWindow() {
         const genAI = new GoogleGenerativeAI(API_KEY);
 
         // Priority list: Flash (Requested) -> Flash 001 (Stable) -> Pro 1.5 -> Legacy
-        const modelsToTry = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-001", "gemini-1.5-pro"];
-        if (userImage) {
-            modelsToTry.push("gemini-pro-vision");
-        } else {
-            modelsToTry.push("gemini-pro");
-        }
+        const modelsToTry = ["gemini-2.0-flash-exp", "gemini-2.0-flash-001", "gemini-2.5-flash"];
 
         let lastError = null;
 
