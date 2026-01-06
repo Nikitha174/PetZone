@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 export default function Home() {
-  const { user, pets, logout, notifications, markRead } = usePets();
+  const { user, pets, logout, notifications, markRead, removePet } = usePets();
   const router = useRouter();
   const [showNotifs, setShowNotifs] = useState(false);
 
@@ -168,14 +168,14 @@ export default function Home() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (confirm(`Remove ${pet.name} from your dashboard?`)) {
-                          window.location.href = '/profile';
+                        if (confirm(`Are you sure you want to remove ${pet.name}?`)) {
+                          removePet(idx);
                         }
                       }}
-                      title="Manage Pet"
-                      style={{ position: 'absolute', top: '1.5rem', left: '1.5rem', width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(0,0,0,0.2)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}
+                      title="Remove Pet"
+                      style={{ position: 'absolute', top: '1.5rem', left: '1.5rem', width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(0,0,0,0.2)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', border: 'none', cursor: 'pointer' }}
                     >
-                      ⚙️
+                      ✕
                     </button>
                   </div>
                   <div style={{ padding: '3.5rem 2rem 2rem 2rem' }}>
@@ -215,7 +215,7 @@ export default function Home() {
                       </div>
                     </div>
 
-                    <Link href="/schedule" className="btn btn-secondary" style={{ width: '100%', marginTop: '1.5rem', fontSize: '1rem', padding: '0.8rem', borderRadius: 'var(--radius-sm)' }}>
+                    <Link href={`/schedule?index=${idx}`} className="btn btn-secondary" style={{ width: '100%', marginTop: '1.5rem', fontSize: '1rem', padding: '0.8rem', borderRadius: 'var(--radius-sm)' }}>
                       Manage Schedule
                     </Link>
                   </div>
