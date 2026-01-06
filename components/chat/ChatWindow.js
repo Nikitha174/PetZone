@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // Hardcoded API Key as requested
-const API_KEY = "AIzaSyA680HILnnJkFlzEfedeA6CDTmA_iB7se0";
+const API_KEY = "AIzaSyD5uMfe4CUSz-c7NTrGun688EyzM06Az0c";
 
 export default function ChatWindow() {
     const [messages, setMessages] = useState([
@@ -35,7 +35,7 @@ export default function ChatWindow() {
         const genAI = new GoogleGenerativeAI(API_KEY);
 
         // Priority list: Flash (Requested) -> Flash 001 (Stable) -> Pro 1.5 -> Legacy
-        const modelsToTry = ["gemini-1.5-flash", "gemini-1.5-flash-001", "gemini-1.5-pro"];
+        const modelsToTry = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-001", "gemini-1.5-pro"];
         if (userImage) {
             modelsToTry.push("gemini-pro-vision");
         } else {
