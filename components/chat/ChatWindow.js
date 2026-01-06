@@ -45,9 +45,9 @@ export default function ChatWindow() {
 
                 let promptParts = [userPrompt];
                 if (!userImage) {
-                    promptParts = ["You are a helpful expert pet assistant. Answer safely and accurately:", userPrompt];
+                    promptParts = ["You are a helpful expert pet assistant. Answer safely and accurately. Do NOT use markdown formatting (bold, italic, lists) or symbols like *. Provide clear, plain text only:", userPrompt];
                 } else {
-                    promptParts = ["You are a helpful pet assistant. Analyze this image and answer. If medical emergency, advise vet immediately.", userPrompt];
+                    promptParts = ["You are a helpful pet assistant. Analyze this image and answer. If medical emergency, advise vet immediately. Do NOT use markdown formatting or symbols like *. Provide clear, plain text only.", userPrompt];
                 }
 
                 if (userImage) {
@@ -102,7 +102,7 @@ export default function ChatWindow() {
                     const newHistory = [...prev];
                     const lastIndex = newHistory.length - 1;
                     if (lastIndex >= 0 && newHistory[lastIndex].role === 'assistant') {
-                        newHistory[lastIndex].content = fullText;
+                        newHistory[lastIndex].content = fullText.replace(/[*#`]/g, '');
                     }
                     return newHistory;
                 });
