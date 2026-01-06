@@ -26,34 +26,33 @@ export default function AuthForm({ initialMode = 'login' }) {
 
         // Simulate network request
         setTimeout(() => {
-            // In a real app, we would validate credentials here
-            const userData = {
-                name: mode === 'signup' ? name : 'User', // Fallback for login if backend existed
-                email: email,
-                phone: mode === 'signup' ? phone : ''
-            };
-
-            // For Demo: If login, try to find existing user or just log in as "User"
-            // If signup, use the provided name/phone
             if (mode === 'login') {
-                // Mock pulling user data (in real app this comes from DB)
-                // For now, we mock it or just use what we have if the user was local
                 const stored = localStorage.getItem('user');
+                let found = false;
                 if (stored) {
                     const parsed = JSON.parse(stored);
                     if (parsed.email === email) {
                         login(parsed);
                         router.push('/');
-                        return;
+                        found = true;
                     }
                 }
-                // Fallback login
-                login({ name: 'Returning User', email: email, phone: '' });
-            } else {
-                login(userData);
-            }
 
-            router.push('/');
+                if (!found) {
+                    alert('Account not found. Please create an account.');
+                    setMode('signup');
+                    setIsLoading(false);
+                }
+            } else {
+                // Signup: Create new user with provided details
+                const userData = {
+                    name: name,
+                    email: email,
+                    phone: phone
+                };
+                login(userData);
+                router.push('/');
+            }
         }, 1500);
     };
 

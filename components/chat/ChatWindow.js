@@ -1,5 +1,9 @@
 "use client";
 import { useState, useEffect, useRef } from 'react';
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+// Hardcoded API Key as requested
+const API_KEY = "AIzaSyA680HILnnJkFlzEfedeA6CDTmA_iB7se0";
 
 export default function ChatWindow() {
     const [messages, setMessages] = useState([
@@ -8,6 +12,7 @@ export default function ChatWindow() {
     const [input, setInput] = useState('');
     const [selectedImage, setSelectedImage] = useState(null);
     const [isTyping, setIsTyping] = useState(false);
+
     const bottomRef = useRef(null);
     const fileInputRef = useRef(null);
 
@@ -26,6 +31,55 @@ export default function ChatWindow() {
         }
     };
 
+    const callGemini = async (userPrompt, userImage) => {
+        const genAI = new GoogleGenerativeAI(API_KEY);
+
+        // Priority list: Flash (Requested) -> Flash 001 (Stable) -> Pro 1.5 -> Legacy
+        const modelsToTry = ["gemini-1.5-flash", "gemini-1.5-flash-001", "gemini-1.5-pro"];
+        if (userImage) {
+            modelsToTry.push("gemini-pro-vision");
+        } else {
+            modelsToTry.push("gemini-pro");
+        }
+
+        let lastError = null;
+
+        for (const modelName of modelsToTry) {
+            try {
+                const model = genAI.getGenerativeModel({ model: modelName });
+
+                let promptParts = [userPrompt];
+                if (!userImage) {
+                    promptParts = ["You are a helpful expert pet assistant. Answer safely and accurately:", userPrompt];
+                } else {
+                    promptParts = ["You are a helpful pet assistant. Analyze this image and answer. If medical emergency, advise vet immediately.", userPrompt];
+                }
+
+                if (userImage) {
+                    const match = userImage.match(/^data:(.+);base64,(.+)$/);
+                    if (match) {
+                        promptParts.push({
+                            inlineData: {
+                                data: match[2],
+                                mimeType: match[1]
+                            }
+                        });
+                    }
+                }
+
+                const result = await model.generateContentStream(promptParts);
+                return result.stream;
+
+            } catch (err) {
+                console.warn(`Model ${modelName} failed, trying next...`, err.message);
+                lastError = err;
+            }
+        }
+
+        console.error("All Gemini models failed");
+        throw lastError;
+    };
+
     const handleSend = async (e) => {
         e.preventDefault();
         if (!input.trim() && !selectedImage) return;
@@ -36,108 +90,67 @@ export default function ChatWindow() {
         setSelectedImage(null);
         setIsTyping(true);
 
+        try {
+            const stream = await callGemini(userMsg.content, userMsg.image);
 
-        // Response Logic
-        setTimeout(() => {
-            let response = "I'm not sure about that specific topic yet, but I'm learning every day! Try asking about pet health, training, diet, or specific breeds.";
+            // Add placeholder message for the assistant
+            setMessages(prev => [...prev, { role: 'assistant', content: "" }]);
+            setIsTyping(false); // Streaming started
 
-            if (userMsg.image) {
-                response = "That looks like a wonderful pet! 📸 Based on the photo, they seem alert and healthy. If you have specific concerns about their skin, eyes, or weight, let me know!";
-            } else {
-                const lowerInput = userMsg.content.toLowerCase();
+            let fullText = "";
+            for await (const chunk of stream) {
+                const chunkText = chunk.text();
+                fullText += chunkText;
 
-                // --- Knowledge Base ---
-                const kb = [
-                    // Urgent / Health
-                    { keys: ['dying', 'blood', 'unconscious', 'seizure', 'emergency', 'poison', 'toxic'], priority: 100, answer: "🚨 **EMERGENCY**: Please go to a veterinarian IMMEDIATELY. I am a virtual assistant and cannot handle life-threatening situations." },
-                    { keys: ['vomit', 'diarrhea', 'sick', 'ill'], priority: 10, answer: "Vomiting or diarrhea can cause dehydration. Withhold food for 12-24 hours but provide water. If it persists for more than a day or if blood is present, see a vet." },
-                    { keys: ['flea', 'tick', 'scratch', 'itch'], priority: 5, answer: "Fleas and ticks are common parasites. Check for 'flea dirt' (black specks) or visible ticks. Use vet-approved preventatives (spot-on or pills). Never use dog products on cats." },
-                    { keys: ['worm', 'parasite', 'scoot'], priority: 5, answer: "Scooting or weight loss might indicate worms. A simple fecal test at your vet can check for this. Deworming medication is very effective." },
-
-                    // Diet & Safety
-                    { keys: ['chocolate', 'cocoa'], priority: 80, answer: "⚠️ **CHOCOLATE IS TOXIC** to dogs and cats. It contains theobromine which can cause heart issues and seizures. If ingested, call a vet." },
-                    { keys: ['grape', 'raisin'], priority: 80, answer: "⚠️ **GRAPES AND RAISINS** can cause kidney failure in dogs. Even small amounts can be dangerous." },
-                    { keys: ['onion', 'garlic'], priority: 80, answer: "Onions and garlic can damage red blood cells in pets, leading to anemia. Avoid feeding them table scraps." },
-                    { keys: ['food', 'diet', 'feed', 'eat'], priority: 1, answer: "A balanced diet is key. Stick to high-quality commercial food appropriate for your pet's age (puppy/kitten vs adult). Avoid human table scraps mostly." },
-
-                    // Training & Behavior
-                    { keys: ['bark', 'noise'], priority: 5, answer: "Barking is communication. If it's excessive, ensure they are exercised and not bored. Ignore attention-seeking barks and reward silence." },
-                    { keys: ['bite', 'aggressive', 'attack'], priority: 10, answer: "Aggression requires professional help. Avoid punishment as it can worsen fear. Consult a professional behaviorist." },
-                    { keys: ['sit', 'train', 'stay', 'trick'], priority: 5, answer: "Training relies on positive reinforcement. Use high-value treats to reward the desired behavior immediately. Keep sessions short (5-10 mins)." },
-                    { keys: ['litter', 'pee', 'poop', 'house'], priority: 5, answer: "House accidents happen. Clean thoroughly with enzyme cleaners. For cats, ensure the litter box is clean. For dogs, stick to a strict schedule." },
-
-                    // Breeds & Types
-                    { keys: ['labrador', 'retriever'], priority: 3, answer: "Labradors are friendly, high-energy dogs. They love water and retrieving. Watch their weight as they love to eat!" },
-                    { keys: ['german shepherd', 'alsatian'], priority: 3, answer: "German Shepherds are intelligent and loyal working dogs. They need plenty of mental stimulation and socialization." },
-                    { keys: ['golden'], priority: 3, answer: "Golden Retrievers are gentle family dogs. They shed a lot and need regular grooming, but their temperament is unmatched." },
-                    { keys: ['bulldog'], priority: 3, answer: "Bulldogs are calm but prone to breathing issues due to their flat faces. Keep them cool in hot weather." },
-                    { keys: ['persian'], priority: 3, answer: "Persians are calm, affectionate cats with long coats that need daily brushing to prevent mats." },
-                    { keys: ['siamese'], priority: 3, answer: "Siamese cats are very vocal and social. They form strong bonds with their owners and don't like being left alone." },
-                    { keys: ['betta', 'fighting fish'], priority: 3, answer: "Betta fish need a heated tank (78-80°F) and should never be kept with other male Bettas. They breathe air from the surface too!" },
-                    { keys: ['hamster'], priority: 3, answer: "Hamsters are solitary (especially Syrians). They need deep bedding for burrowing and a solid-surface wheel." },
-
-                    // Legal / Admin
-                    { keys: ['license', 'register', 'law'], priority: 5, answer: "Pet licensing is mandatory in many places. It proves ownership and ensures rabies vaccination. You can manage licenses in the 'Profile' tab." },
-                    { keys: ['microchip', 'chip'], priority: 5, answer: "Microchipping is a permanent ID. It's crucial for reuniting lost pets. Ask your vet to scan it to ensure it's readable." },
-
-                    // General Chat
-                    { keys: ['hello', 'hi', 'hey', 'greetings'], priority: 2, answer: "Hello there! 👋 I'm here to help. Trained on vast pet knowledge. How can I assist you and your furry (or scaly) friend today?" },
-                    { keys: ['thank', 'thanks'], priority: 2, answer: "You're very welcome! Give your pet a pat from me. 🐾" },
-                    { keys: ['who are you', 'what are you', 'name'], priority: 2, answer: "I am a virtual assistant powered by a comprehensive pet knowledge base to help you with pet care." },
-                    { keys: ['joke', 'funny'], priority: 2, answer: "Why did the cowboy adopt a dachshund? Because he wanted to get a long little doggie! 🤠🐕" },
-                    { keys: ['meaning of life'], priority: 1, answer: "To treat everyone with kindness... and to catch the red dot. 🔴" }
-                ];
-
-                // --- Matching Logic ---
-                let bestMatch = null;
-                let maxScore = 0;
-
-                for (const item of kb) {
-                    let score = 0;
-                    let matches = 0;
-                    for (const key of item.keys) {
-                        if (lowerInput.includes(key)) {
-                            score += 10;
-                            matches++;
-                        }
+                // Update the last message (assistant's) with accumulated text
+                setMessages(prev => {
+                    const newHistory = [...prev];
+                    const lastIndex = newHistory.length - 1;
+                    if (lastIndex >= 0 && newHistory[lastIndex].role === 'assistant') {
+                        newHistory[lastIndex].content = fullText;
                     }
-                    if (matches > 0) {
-                        score += item.priority; // Add priority if there is at least one match
-                        if (score > maxScore) {
-                            maxScore = score;
-                            bestMatch = item;
-                        }
-                    }
-                }
-
-                if (bestMatch) {
-                    response = bestMatch.answer;
-                    // Append general advice if context fits?
-                    if (lowerInput.includes('dog') && !bestMatch.answer.toLowerCase().includes('dog') && !bestMatch.answer.toLowerCase().includes('cat')) {
-                        // Keep generic
-                    }
-                } else {
-                    // OpenAI/LLM Fallback Simulation
-                    // If we don't know the answer, we try to be helpful based on broad categories
-                    if (lowerInput.includes('dog') || lowerInput.includes('puppy')) response = "I see you're asking about dogs. While I don't have a specific answer for that, generally ensure they are fed, exercised, and loved. Can you specificy if it's about health or behavior?";
-                    else if (lowerInput.includes('cat') || lowerInput.includes('kitten')) response = "Cats can be mysterious! For general care, ensure they have a litter box and fresh water. Is there a specific behavior dealing with?";
-                    else if (lowerInput.includes('?')) response = "That's an interesting question. As a virtual assistant, I suggest consulting a licensed veterinarian for specific medical or behavioral diagnosis.";
-                }
+                    return newHistory;
+                });
             }
-
-            setMessages(prev => [...prev, { role: 'assistant', content: response }]);
+        } catch (err) {
             setIsTyping(false);
-        }, 800);
+            console.error(err);
+            // Fallback for errors
+            setTimeout(() => {
+                let friendlyError = "I'm having trouble connecting to my brain right now.";
+                const msg = err.message || "";
+
+                if (msg.includes("404")) friendlyError = "Error: Model not found (404). Tried multiple versions.";
+                else if (msg.includes("400")) friendlyError = "Error: Invalid API Key or Request (400).";
+                else if (msg.includes("429")) friendlyError = "Error: Quota Exceeded (429).";
+
+                const response = `${friendlyError}\n\n(Debug: ${msg})`;
+
+                // If there's an empty placeholder, fill it. Otherwise add new.
+                setMessages(prev => {
+                    const lastIndex = prev.length - 1;
+                    if (lastIndex >= 0 && prev[lastIndex].role === 'assistant' && prev[lastIndex].content === "") {
+                        const newHistory = [...prev];
+                        newHistory[lastIndex].content = response;
+                        return newHistory;
+                    }
+                    return [...prev, { role: 'assistant', content: response }];
+                });
+            }, 500);
+        }
     };
 
     return (
-        <div className="card" style={{ height: '75vh', display: 'flex', flexDirection: 'column', padding: '0', overflow: 'hidden', boxShadow: 'var(--shadow-md)', border: 'none' }}>
+        <div className="card" style={{ height: '75vh', display: 'flex', flexDirection: 'column', padding: '0', overflow: 'hidden', boxShadow: 'var(--shadow-md)', border: 'none', position: 'relative' }}>
+
             {/* Chat Header */}
             <div style={{ background: 'var(--primary)', padding: '1rem', color: 'white', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <div style={{ width: '40px', height: '40px', background: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem' }}>🤖</div>
+                <div style={{ width: '40px', height: '40px', background: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem' }}>
+                    🧠
+                </div>
                 <div>
                     <h3 style={{ fontSize: '1rem', margin: 0 }}>Pet Expert</h3>
-                    <p style={{ fontSize: '0.8rem', opacity: 0.9, margin: 0 }}>Always online</p>
+                    <p style={{ fontSize: '0.8rem', opacity: 0.9, margin: 0 }}>Powered by AI</p>
                 </div>
             </div>
 
@@ -157,7 +170,8 @@ export default function ChatWindow() {
                             background: msg.role === 'user' ? 'var(--primary)' : 'white',
                             color: msg.role === 'user' ? 'white' : 'var(--text-main)',
                             boxShadow: 'var(--shadow-sm)',
-                            whiteSpace: 'pre-wrap'
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word'
                         }}>
                             {msg.image && (
                                 <img src={msg.image} alt="User Upload" style={{ maxWidth: '100%', borderRadius: '8px', marginBottom: '0.5rem', display: 'block' }} />
@@ -204,7 +218,6 @@ export default function ChatWindow() {
                         className="btn btn-secondary"
                         style={{ borderRadius: '50%', width: '50px', height: '50px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}
                         title="Upload Image"
-                        suppressHydrationWarning
                     >
                         📷
                     </button>
@@ -212,11 +225,10 @@ export default function ChatWindow() {
                     <input
                         value={input}
                         onChange={e => setInput(e.target.value)}
-                        placeholder="Type your question..."
+                        placeholder="Ask anything..."
                         style={{ flex: 1, border: '1px solid var(--surface-border)', borderRadius: '2rem', paddingLeft: '1.5rem' }}
-                        suppressHydrationWarning
                     />
-                    <button type="submit" className="btn btn-primary" style={{ borderRadius: '50%', width: '50px', height: '50px', padding: 0 }} disabled={isTyping || (!input.trim() && !selectedImage)} suppressHydrationWarning>
+                    <button type="submit" className="btn btn-primary" style={{ borderRadius: '50%', width: '50px', height: '50px', padding: 0 }} disabled={isTyping || (!input.trim() && !selectedImage)}>
                         ➤
                     </button>
                 </div>
