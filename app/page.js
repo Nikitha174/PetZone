@@ -70,7 +70,7 @@ export default function Home() {
 
             {/* Notification Dropdown */}
             {showNotifs && (
-              <div className="card animate-enter" style={{ position: 'absolute', top: '130%', right: -10, width: '360px', zIndex: 100, padding: '0', maxHeight: '500px', overflowY: 'auto', boxShadow: 'var(--shadow-lg)' }}>
+              <div className="card animate-enter notification-dropdown" style={{ padding: '0' }}>
                 <div style={{ padding: '1.2rem', borderBottom: '1px solid var(--surface-border)', display: 'flex', justifyContent: 'space-between', background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)', position: 'sticky', top: 0 }}>
                   <h4 style={{ fontWeight: '800' }}>Notifications</h4>
                   <button onClick={() => setShowNotifs(false)} style={{ color: 'var(--text-muted)' }}>✕</button>

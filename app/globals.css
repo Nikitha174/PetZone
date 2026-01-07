@@ -300,3 +300,26 @@ select:focus {
     width: auto !important;
   }
 }
+
+.notification-dropdown {
+  position: absolute;
+  top: 130%;
+  /* Below the bell */
+  right: -10px;
+  width: 360px;
+  max-height: 500px;
+  overflow-y: auto;
+  z-index: 2000;
+  box-shadow: var(--shadow-lg);
+}
+
+@media (max-width: 768px) {
+  .notification-dropdown {
+    position: fixed;
+    top: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90vw;
+    right: auto;
+  }
+}
