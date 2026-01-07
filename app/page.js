@@ -55,7 +55,7 @@ export default function Home() {
   return (
     <main className="container" style={{ padding: '2rem 1.5rem', minHeight: '100vh', paddingBottom: '6rem' }}>
       {/* Header */}
-      <header className="animate-enter" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4rem', position: 'relative', zIndex: 1000 }}>
+      <header className="animate-enter flex-stack-mobile" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: '4rem', position: 'relative', zIndex: 1000 }}>
         <h1 className="title-gradient" style={{ fontSize: '2rem', fontWeight: '900', letterSpacing: '-1px' }}>PetZone</h1>
 
         <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
@@ -136,7 +136,7 @@ export default function Home() {
             </Link>
           </div>
         ) : (
-          <div className="animate-enter delay-200" style={{ display: 'grid', gap: '2rem', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))' }}>
+          <div className="animate-enter delay-200" style={{ display: 'grid', gap: '2rem', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
             {pets.map((pet, idx) => {
               // Simple Care Score Logic
               let careScore = 70; // Base score

@@ -35,7 +35,7 @@ export default function ProfilePage() {
             <h1 className="title-gradient" style={{ fontSize: '2rem', marginBottom: '2rem', fontWeight: '800' }}>My Profile</h1>
 
             <div className="card animate-enter">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '2rem', paddingBottom: '2rem', borderBottom: '1px solid var(--surface-border)' }}>
+                <div className="flex-stack-mobile items-center-mobile text-center-mobile" style={{ gap: '1.5rem', marginBottom: '2rem', paddingBottom: '2rem', borderBottom: '1px solid var(--surface-border)' }}>
                     <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--primary), var(--secondary))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2.5rem', color: 'white', fontWeight: 'bold' }}>
                         {user.name[0]}
                     </div>

@@ -246,3 +246,57 @@ select:focus {
 .pulse {
   animation: pulse-ring 2s infinite;
 }
+
+/* Responsive Utilities */
+.grid-stack-mobile {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .grid-stack-mobile {
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+  }
+}
+
+.flex-stack-mobile {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  .flex-stack-mobile {
+    flex-direction: row;
+  }
+}
+
+.mobile-full-width {
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .container {
+    padding: 0 1rem;
+  }
+
+  .hide-mobile {
+    display: none;
+  }
+
+  .text-center-mobile {
+    text-align: center;
+  }
+
+  .items-center-mobile {
+    align-items: center !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .w-auto-desktop {
+    width: auto !important;
+  }
+}

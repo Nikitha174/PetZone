@@ -36,7 +36,7 @@ export default function ExpenseTracker() {
 
     return (
         <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
+            <div className="grid-stack-mobile" style={{ marginBottom: '2rem' }}>
                 <div className="card" style={{ textAlign: 'center', background: 'linear-gradient(135deg, var(--primary), var(--secondary))', color: 'white' }}>
                     <h3 style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>Total Spending</h3>
                     <div style={{ fontSize: '2.5rem', fontWeight: '800' }}>₹{total.toFixed(2)}</div>
@@ -45,7 +45,7 @@ export default function ExpenseTracker() {
                 <div className="card">
                     <h3 style={{ marginBottom: '1rem', color: 'var(--primary)' }}>Add Expense</h3>
                     <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '1rem' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                        <div className="grid-stack-mobile" style={{ gap: '1rem' }}>
                             <input
                                 type="number"
                                 value={form.amount}
@@ -84,7 +84,7 @@ export default function ExpenseTracker() {
             {last7Days.length > 0 && (
                 <div className="card" style={{ marginBottom: '2rem' }}>
                     <h3 style={{ marginBottom: '1.5rem', fontWeight: 'bold' }}>Daily Trends</h3>
-                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px', height: '200px', paddingBottom: '1rem', borderBottom: '1px solid var(--surface-border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px', height: '200px', paddingBottom: '1rem', borderBottom: '1px solid var(--surface-border)', overflowX: 'auto' }}>
                         {last7Days.map(date => {
                             const val = dailyData[date];
                             const heightPct = (val / maxDaily) * 100;

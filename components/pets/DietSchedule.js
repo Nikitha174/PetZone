@@ -14,8 +14,8 @@ export default function DietSchedule({ value, onChange }) {
     return (
         <div>
             <p style={{ marginBottom: '1rem', color: 'var(--text-muted)' }}>Set up daily feeding reminders.</p>
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-                <input type="time" value={time} onChange={e => setTime(e.target.value)} style={{ width: 'auto' }} />
+            <div className="flex-stack-mobile" style={{ marginBottom: '1rem', gap: '0.5rem' }}>
+                <input type="time" value={time} onChange={e => setTime(e.target.value)} className="w-auto-desktop" />
                 <input placeholder="Food details (e.g. 1 cup)" value={food} onChange={e => setFood(e.target.value)} style={{ flex: 1 }} />
                 <button type="button" onClick={add} className="btn btn-primary" style={{ padding: '0 1.25rem' }}>+</button>
             </div>
