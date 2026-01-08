@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 
@@ -10,10 +9,10 @@ export async function POST(req) {
         userMessage = message || "";
 
         // --- ROUTING LOGIC ---
-        // 1. If Image is present -> Use Gemini (Best for Multimodal Vision)
-        // 2. If Text Only -> Use Groq (Best for Speed/Llama-3.3 Intelligence)
+        // 1. If Image is present -> Use Groq Vision (Llama 3.2 Vision)
+        // 2. If Text Only -> Use Groq Text (Llama 3.3)
         if (image) {
-            return await handleGeminiResponse(message, image);
+            return await handleGroqVisionResponse(message, image);
         } else {
             return await handleGroqResponse(message);
         }
@@ -31,37 +30,37 @@ export async function POST(req) {
 }
 
 // -----------------------------------------------------
-// 🎨 HANDLER: Gemini (Vision/Multimodal)
+// 👁️ HANDLER: Groq Vision (Llama 3.2)
 // -----------------------------------------------------
-async function handleGeminiResponse(message, image) {
-    const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-    if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
+async function handleGroqVisionResponse(message, image) {
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) throw new Error("Missing GROQ_API_KEY");
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash-001",
-        systemInstruction: "You are a helpful expert pet assistant. Analyze the image and question safely."
+    const openai = new OpenAI({
+        apiKey: apiKey,
+        baseURL: "https://api.groq.com/openai/v1",
     });
 
-    const parts = [];
-    if (message) parts.push(message);
+    const completion = await openai.chat.completions.create({
+        model: "llama-3.2-11b-vision-preview",
+        messages: [
+            {
+                role: "user",
+                content: [
+                    { type: "text", text: message || "Analyze this image." },
+                    {
+                        type: "image_url",
+                        image_url: {
+                            url: image, // Pass the Data URL directly
+                        },
+                    },
+                ],
+            },
+        ],
+        max_tokens: 300,
+    });
 
-    const matches = image.match(/^data:(.+);base64,(.+)$/);
-    if (matches) {
-        const mimeType = matches[1];
-        const data = matches[2];
-
-        parts.push({
-            inlineData: {
-                data: data,
-                mimeType: mimeType
-            }
-        });
-    }
-
-    const result = await model.generateContent(parts);
-    const response = await result.response;
-    return NextResponse.json({ reply: response.text() });
+    return NextResponse.json({ reply: completion.choices[0].message.content });
 }
 
 // -----------------------------------------------------
