@@ -30,7 +30,7 @@ export async function POST(req) {
 }
 
 // -----------------------------------------------------
-// 👁️ HANDLER: Groq Vision (Llama 3.2)
+// 👁️ HANDLER: Groq Vision (Robust Multi-Model Support)
 // -----------------------------------------------------
 async function handleGroqVisionResponse(message, image) {
     const apiKey = process.env.GROQ_API_KEY;
@@ -41,26 +41,52 @@ async function handleGroqVisionResponse(message, image) {
         baseURL: "https://api.groq.com/openai/v1",
     });
 
-    const completion = await openai.chat.completions.create({
-        model: "llama-3.2-11b-vision-preview",
-        messages: [
-            {
-                role: "user",
-                content: [
-                    { type: "text", text: message || "Analyze this image." },
+    // List of potential vision models to try in order of preference
+    const VISION_MODELS = [
+        "llama-3.2-90b-vision-preview",
+        "llama-3.2-11b-vision-preview",
+        "llama-3-vision-alpha" // Historical fallback
+    ];
+
+    let lastError = null;
+
+    for (const modelName of VISION_MODELS) {
+        try {
+            console.log(`Attempting Vision with model: ${modelName}`);
+            const completion = await openai.chat.completions.create({
+                model: modelName,
+                messages: [
                     {
-                        type: "image_url",
-                        image_url: {
-                            url: image, // Pass the Data URL directly
-                        },
+                        role: "user",
+                        content: [
+                            { type: "text", text: message || "Analyze this image." },
+                            {
+                                type: "image_url",
+                                image_url: {
+                                    url: image,
+                                },
+                            },
+                        ],
                     },
                 ],
-            },
-        ],
-        max_tokens: 300,
-    });
+                max_tokens: 300,
+            });
 
-    return NextResponse.json({ reply: completion.choices[0].message.content });
+            // If successful, return immediately
+            return NextResponse.json({ reply: completion.choices[0].message.content });
+
+        } catch (error) {
+            console.warn(`Model ${modelName} failed:`, error.message);
+            lastError = error;
+
+            // If it's not a model availability error (e.g. invalid key), maybe stop? 
+            // But usually 400/404 for model is safe to retry next.
+            if (error.status === 401) throw error; // Don't retry invalid auth
+        }
+    }
+
+    // If all failed
+    throw new Error(`All vision models failed. Last error: ${lastError?.message}`);
 }
 
 // -----------------------------------------------------
