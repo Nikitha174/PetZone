@@ -1,11 +1,13 @@
 "use client";
 import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { createClient } from '@/utils/supabase/client';
 
 const PetContext = createContext();
 
 export function PetProvider({ children }) {
     const router = useRouter();
+    const supabase = createClient();
     const [user, setUser] = useState(null);
     const [pets, setPets] = useState([]);
     const [notifications, setNotifications] = useState([]);
@@ -13,26 +15,70 @@ export function PetProvider({ children }) {
     const [healthRecords, setHealthRecords] = useState([]);
     const [expenses, setExpenses] = useState([]);
 
-    // Load session on mount
+    // 1. Auth Listener
     useEffect(() => {
-        const savedUser = localStorage.getItem('user');
-        if (savedUser) {
-            const parsedUser = JSON.parse(savedUser);
-            setUser(parsedUser);
-            // Load user specific data
-            const key = parsedUser.email || parsedUser.phone || parsedUser.name;
-            const userPets = JSON.parse(localStorage.getItem(`pets_${key}`) || '[]');
-            const userBehaviors = JSON.parse(localStorage.getItem(`behaviors_${key}`) || '[]');
-            const userHealth = JSON.parse(localStorage.getItem(`health_${key}`) || '[]');
-            const userExpenses = JSON.parse(localStorage.getItem(`expenses_${key}`) || '[]');
-            setPets(userPets);
-            setBehaviors(userBehaviors);
-            setHealthRecords(userHealth);
-            setExpenses(userExpenses);
-        }
+        const checkUser = async () => {
+            const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+            if (supabaseUser) {
+                setUser({
+                    id: supabaseUser.id,
+                    email: supabaseUser.email,
+                    name: supabaseUser.user_metadata?.name || 'Pet Owner',
+                    picture: supabaseUser.user_metadata?.picture || '',
+                    phone: supabaseUser.user_metadata?.phone || ''
+                });
+                fetchUserData(supabaseUser.id);
+            } else {
+                setUser(null);
+            }
+        };
+
+        checkUser();
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+            if (session?.user) {
+                const u = session.user;
+                setUser({
+                    id: u.id,
+                    email: u.email,
+                    name: u.user_metadata?.name || 'Pet Owner',
+                    picture: u.user_metadata?.picture || '',
+                    phone: u.user_metadata?.phone || ''
+                });
+                fetchUserData(u.id);
+            } else {
+                setUser(null);
+                setPets([]);
+                setBehaviors([]);
+                setHealthRecords([]);
+                setExpenses([]);
+            }
+        });
+
+        return () => subscription.unsubscribe();
     }, []);
 
-    // Feeding Reminder System
+    const fetchUserData = async (userId) => {
+        // Fetch Pets
+        const { data: petsData } = await supabase.from('pets').select('*').eq('user_id', userId);
+        if (petsData) {
+            setPets(petsData.map(p => ({
+                ...p,
+                diet: typeof p.diet === 'string' ? JSON.parse(p.diet || '[]') : (p.diet || [])
+            })));
+        }
+
+        const { data: behaviorsData } = await supabase.from('behaviors').select('*').eq('user_id', userId);
+        if (behaviorsData) setBehaviors(behaviorsData);
+
+        const { data: healthData } = await supabase.from('health_records').select('*').eq('user_id', userId);
+        if (healthData) setHealthRecords(healthData);
+
+        const { data: expenseData } = await supabase.from('expenses').select('*').eq('user_id', userId);
+        if (expenseData) setExpenses(expenseData);
+    };
+
+    // Feeding Reminder System (Client Side for now)
     const lastCheckRef = useRef(null);
     const notifiedRef = useRef(new Set());
 
@@ -44,13 +90,15 @@ export function PetProvider({ children }) {
             const currentTime = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
             const todayDate = now.toDateString();
 
-            // Prevent checking multiple times in the same minute
             if (lastCheckRef.current === currentTime) return;
             lastCheckRef.current = currentTime;
 
             pets.forEach(pet => {
                 if (!pet.diet) return;
-                pet.diet.forEach(meal => {
+                // Parse diet if it comes as string from DB
+                const diet = typeof pet.diet === 'string' ? JSON.parse(pet.diet) : pet.diet;
+
+                diet.forEach(meal => {
                     if (meal.time === currentTime) {
                         const uniqueKey = `${pet.name}-${meal.time}-${todayDate}`;
                         if (!notifiedRef.current.has(uniqueKey)) {
@@ -62,214 +110,253 @@ export function PetProvider({ children }) {
             });
         };
 
-        const interval = setInterval(checkFeeding, 10000); // Check every 10 seconds to catch the minute change
+        const interval = setInterval(checkFeeding, 10000);
         return () => clearInterval(interval);
-    }, [user, pets]); // specific dependency on pets to ensure we have latest data
+    }, [user, pets]);
 
-    const login = (userData) => {
-        setUser(userData);
-        setNotifications([]); // Clear previous session notifications
-        localStorage.setItem('user', JSON.stringify(userData));
-        const key = userData.email || userData.phone || userData.name;
-        const userPets = JSON.parse(localStorage.getItem(`pets_${key}`) || '[]');
-        const userBehaviors = JSON.parse(localStorage.getItem(`behaviors_${key}`) || '[]');
-        const userHealth = JSON.parse(localStorage.getItem(`health_${key}`) || '[]');
-        const userExpenses = JSON.parse(localStorage.getItem(`expenses_${key}`) || '[]');
-        setPets(userPets);
-        setBehaviors(userBehaviors);
-        setHealthRecords(userHealth);
-        setExpenses(userExpenses);
-
-        // Use a timeout to ensure this runs after state update, or just direct call if we were not inside an effect.
-        // Direct call is fine as setNotifications is async but will queue.
-        // We use a functional update in addNotification so it's safe.
-        setTimeout(() => addNotification('Welcome Back', `Successfully logged in as ${userData.name}`), 100);
+    // Actions
+    const login = async (email, password) => {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        router.push('/');
     };
 
-    const logout = () => {
-        setUser(null);
-        setPets([]);
-        setBehaviors([]);
-        setHealthRecords([]);
-        setExpenses([]);
-        setNotifications([]); // Clear notifications
-        localStorage.removeItem('user');
+    const logout = async () => {
+        await supabase.auth.signOut();
         router.push('/login');
     };
 
-    const updateUser = (newUserData) => {
+    const deleteAccount = async () => {
         if (!user) return;
+        // Supabase usually requires admin rights to fully delete user via client, 
+        // but we can delete data.
+        await supabase.from('pets').delete().eq('user_id', user.id);
+        await supabase.auth.signOut(); // User still technically exists in Auth
+        router.push('/login');
+        addNotification('Account Deleted', 'Your data has been removed.');
+    };
 
-        const oldKey = user.email || user.phone || user.name;
-        const updatedUser = { ...user, ...newUserData };
-        const newKey = updatedUser.email || updatedUser.phone || updatedUser.name;
+    const addPet = async (pet) => {
+        const { data, error } = await supabase.from('pets').insert([{
+            user_id: user.id,
+            name: pet.name,
+            species: pet.species,
+            breed: pet.breed,
+            age: pet.age,
+            weight: pet.weight,
+            diet: JSON.stringify(pet.diet || []) // Store complex objects as JSON string if simple schema
+        }]).select();
 
-        setUser(updatedUser);
-        localStorage.setItem('user', JSON.stringify(updatedUser));
+        if (error) {
+            console.error(error);
+            addNotification('Error', 'Failed to add pet.');
+            return;
+        }
 
-        // specialized handling if the key changed (e.g. email change)
-        if (oldKey !== newKey) {
-            const oldPets = localStorage.getItem(`pets_${oldKey}`);
-            const oldBehaviors = localStorage.getItem(`behaviors_${oldKey}`);
+        if (data) {
+            setPets(prev => [...prev, data[0]]);
+            addNotification(`New Pet Added`, `Profile for ${pet.name} created successfully.`);
+        }
+    };
 
-            if (oldPets) {
-                localStorage.setItem(`pets_${newKey}`, oldPets);
-                localStorage.removeItem(`pets_${oldKey}`);
+    const removePet = async (petId) => {
+        const { error } = await supabase.from('pets').delete().eq('id', petId);
+        if (!error) {
+            setPets(prev => prev.filter(p => p.id !== petId));
+            addNotification('Pet Removed', 'Pet profile has been deleted.');
+        }
+    };
+
+    // Updates
+    const updatePetDiet = async (petId, newDiet) => {
+        const { error } = await supabase.from('pets').update({ diet: JSON.stringify(newDiet) }).eq('id', petId);
+        if (!error) {
+            setPets(prev => prev.map(p => p.id === petId ? { ...p, diet: newDiet } : p));
+            addNotification(`Schedule Updated`, `Feeding schedule updated.`);
+        }
+    };
+
+    const addBehaviorLog = async (petId, issue) => {
+        const pet = pets.find(p => p.id === petId);
+        let remedy = "Consult a professional trainer.";
+
+        try {
+            // 1. Get AI Suggestion
+            addNotification('Analyzing...', 'Consulting AI for remedy. Please wait.');
+            const res = await fetch('/api/generate-remedy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    issue,
+                    petDetails: {
+                        name: pet?.name || 'Pet',
+                        species: pet?.species || 'Animal',
+                        breed: pet?.breed || 'Unknown',
+                        age: pet?.age || '?'
+                    }
+                })
+            });
+            const data = await res.json();
+            if (data.remedy) {
+                remedy = data.remedy;
+            } else if (data.details) {
+                console.error("AI Error Details:", data.details);
+                addNotification('AI Error', data.details);
             }
-            if (oldBehaviors) {
-                localStorage.setItem(`behaviors_${newKey}`, oldBehaviors);
-                localStorage.removeItem(`behaviors_${oldKey}`);
+        } catch (err) {
+            console.error("AI Generation failed", err);
+            addNotification('Connection Error', 'Failed to reach AI service.');
+        }
+
+        // 2. Save to DB
+        const { data, error } = await supabase.from('behaviors').insert([{
+            user_id: user.id,
+            pet_id: petId,
+            issue: issue,
+            date: new Date().toISOString().split('T')[0],
+            remedy: remedy
+        }]).select();
+
+        if (error) {
+            console.error(error);
+            addNotification('Error', 'Failed to log behavior.');
+        } else if (data) {
+            setBehaviors(prev => [data[0], ...prev]);
+            addNotification('Behavior Logged', 'Remedy generated and saved.');
+        }
+    };
+
+    const removeBehavior = async (id) => {
+        const { error } = await supabase.from('behaviors').delete().eq('id', id);
+        if (error) {
+            console.error(error);
+            addNotification('Error', 'Failed to remove entry.');
+        } else {
+            setBehaviors(prev => prev.filter(b => b.id !== id));
+            addNotification('Removed', 'Behavior entry deleted.');
+        }
+    };
+
+    const addHealthRecord = async (record) => {
+        // Resolve petId from petName if needed, but better to pass petId directly.
+        // Assuming record has petId or we find it.
+        let targetPetId = record.petId;
+        if (!targetPetId && record.petName) {
+            const p = pets.find(p => p.name === record.petName);
+            if (p) targetPetId = p.id;
+        }
+
+        const { data, error } = await supabase.from('health_records').insert([{
+            user_id: user.id,
+            pet_id: targetPetId,
+            type: record.type,
+            title: record.title,
+            date: record.date,
+            next_due: record.nextDue || null,
+            notes: record.notes,
+            weight: record.weight
+        }]).select();
+
+        if (error) {
+            console.error(error);
+            addNotification('Error', 'Failed to save health record.');
+        } else if (data) {
+            setHealthRecords(prev => [data[0], ...prev]);
+            addNotification('Health Record Saved', `${record.type} recorded.`);
+        }
+    };
+
+    const addExpense = async (record) => {
+        const { data, error } = await supabase.from('expenses').insert([{
+            user_id: user.id,
+            amount: record.amount,
+            category: record.category,
+            date: record.date,
+            description: record.note // Map 'note' from UI to 'description' in DB
+        }]).select();
+
+        if (error) {
+            console.error(error);
+            addNotification('Error', 'Failed to save expense.');
+        } else if (data) {
+            setExpenses(prev => [data[0], ...prev]);
+            addNotification('Expense Added', `₹${record.amount} added to budget.`);
+        }
+    };
+
+    const updateUser = async (updatedData) => {
+        const updates = {
+            data: {
+                name: updatedData.name,
+                phone: updatedData.phone
             }
-        }
-
-        addNotification('Profile Updated', 'Your profile details have been saved successfully.');
-    };
-
-    const persistPets = (newPets) => {
-        setPets(newPets);
-        if (user) {
-            const key = user.email || user.phone || user.name;
-            localStorage.setItem(`pets_${key}`, JSON.stringify(newPets));
-        }
-    };
-
-    const persistBehaviors = (newBehaviors) => {
-        setBehaviors(newBehaviors);
-        if (user) {
-            const key = user.email || user.phone || user.name;
-            localStorage.setItem(`behaviors_${key}`, JSON.stringify(newBehaviors));
-        }
-    };
-
-    const persistHealthRecords = (records) => {
-        setHealthRecords(records);
-        if (user) {
-            const key = user.email || user.phone || user.name;
-            localStorage.setItem(`health_${key}`, JSON.stringify(records));
-        }
-    };
-
-    const addHealthRecord = (record) => {
-        const newRecord = { id: Date.now(), date: new Date().toLocaleDateString(), ...record };
-        const updated = [newRecord, ...healthRecords];
-        persistHealthRecords(updated);
-        addNotification('Health Record Added', `New ${record.type} record saved.`);
-    };
-
-    const persistExpenses = (records) => {
-        setExpenses(records);
-        if (user) {
-            const key = user.email || user.phone || user.name;
-            localStorage.setItem(`expenses_${key}`, JSON.stringify(records));
-        }
-    };
-
-    const addExpense = (record) => {
-        const newRecord = { id: Date.now(), date: new Date().toLocaleDateString(), ...record };
-        const updated = [newRecord, ...expenses];
-        persistExpenses(updated);
-        addNotification('Expense Added', `Recorded ₹${record.amount} for ${record.category}.`);
-    };
-
-    const addPet = (pet) => {
-        const newPet = { ...pet, nextMeal: pet.diet?.[0]?.time || 'TBD', licenseDays: 365 };
-        const updatedPets = [...pets, newPet];
-        persistPets(updatedPets); // Use persistPets
-
-        addNotification(`New Pet Added`, `Profile for ${pet.name} created successfully.`);
-    };
-
-    const updatePetDiet = (petIndex, newDiet) => {
-        const updatedPets = [...pets];
-        updatedPets[petIndex].diet = newDiet;
-        updatedPets[petIndex].nextMeal = newDiet?.[0]?.time || 'TBD';
-        persistPets(updatedPets); // Use persistPets
-        addNotification(`Schedule Updated`, `Feeding schedule for ${updatedPets[petIndex].name} has been updated.`);
-    };
-
-    const removePet = (petIndex) => {
-        const updatedPets = pets.filter((_, index) => index !== petIndex);
-        persistPets(updatedPets); // Use persistPets
-        addNotification('Pet Removed', 'Pet profile has been deleted.');
-    };
-
-    const addBehaviorLog = (petId, issue) => {
-        const remedies = {
-            'Barking': 'Increase exercise and mental stimulation. Ignore attention-seeking barks.',
-            'Chewing': 'Provide more chew toys. Ensure they are not bored.',
-            'Aggression': 'Consult a professional trainer immediately. Avoid triggers.',
-            'Anxiety': 'Try a Thundershirt or calming treats. Create a safe space.',
-            'Scratching': 'Check for fleas or allergies. Keep nails trimmed.',
-            'Other': 'Monitor closely and consult a vet if it persists.'
         };
+        if (updatedData.email !== user.email) {
+            updates.email = updatedData.email;
+        }
 
-        const remedy = remedies[issue] || remedies['Other'];
+        const { data, error } = await supabase.auth.updateUser(updates);
 
-        const newLog = {
-            id: Date.now(),
-            petId,
-            date: new Date().toLocaleDateString(),
-            issue,
-            remedy
-        };
+        if (error) {
+            console.error(error);
+            addNotification('Error', error.message);
+        } else {
+            // Local update
+            setUser(prev => ({ ...prev, ...updatedData }));
+            addNotification('Profile Updated', 'Changes saved successfully.');
+        }
+    };
+    const updatePetLicense = async (petId, details) => {
+        const { error } = await supabase.from('pets').update({
+            license_number: details.number,
+            license_date: details.expiryDate
+        }).eq('id', petId);
 
-        const updatedBehaviors = [newLog, ...behaviors];
-        persistBehaviors(updatedBehaviors); // Use persistBehaviors
-        // Find pet name if possible
-        const petName = pets.find(p => p.id === petId || p.name === petId)?.name || 'Pet';
-        addNotification(`Behavior Alert`, `Recorded "${issue}" for ${petName}. Remedy suggested.`);
+        if (error) {
+            console.error(error);
+            addNotification('Error', 'Failed to update license.');
+        } else {
+            setPets(prev => prev.map(p => p.id === petId ? {
+                ...p,
+                license_number: details.number,
+                license_date: details.expiryDate
+            } : p));
+            addNotification('License Updated', 'Pet license records saved.');
+        }
     };
 
+    // Derived from pet data since we don't have a separate history table yet
+    const getLicenseHistory = () => {
+        return pets
+            .filter(p => p.license_date)
+            .map(p => ({
+                id: p.id,
+                petName: p.name,
+                date: p.license_date,
+                action: 'Renewed',
+                details: `License: ${p.license_number}`
+            }));
+    };
+
+    // Notification Helper (Local state only)
     const addNotification = (title, message) => {
         setNotifications(prev => [{ id: Date.now(), title, message, time: 'Just now', read: false }, ...prev]);
     };
-
     const markRead = (id) => {
         setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
     };
 
-    const updatePetLicense = (petIndex, details) => {
-        const updatedPets = [...pets];
-        // Merge new details
-        updatedPets[petIndex].licenseDetails = { ...updatedPets[petIndex].licenseDetails, ...details };
-
-        // Update days remaining logic
-        if (details.expiryDate) {
-            const today = new Date();
-            const exp = new Date(details.expiryDate);
-            const diffTime = Math.abs(exp - today);
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            updatedPets[petIndex].licenseDays = diffDays;
-        }
-
-        persistPets(updatedPets);
-
-        // Add to history if it's a renewal (has usage of new date)
-        if (details.expiryDate) {
-            const key = user.email || user.phone || user.name;
-            const history = JSON.parse(localStorage.getItem(`license_history_${key}`) || '[]');
-            const newRecord = {
-                id: Date.now(),
-                petName: updatedPets[petIndex].name,
-                action: 'Renewal/Update',
-                date: new Date().toLocaleDateString(),
-                details: `Expires on ${details.expiryDate}`
-            };
-            const newHistory = [newRecord, ...history];
-            localStorage.setItem(`license_history_${key}`, JSON.stringify(newHistory));
-        }
-
-        addNotification('License Updated', `License details for ${updatedPets[petIndex].name} saved.`);
-    };
-
-    const getLicenseHistory = () => {
-        if (!user) return [];
-        const key = user.email || user.phone || user.name;
-        return JSON.parse(localStorage.getItem(`license_history_${key}`) || '[]');
-    };
-
     return (
-        <PetContext.Provider value={{ user, login, logout, pets, addPet, removePet, updatePetDiet, notifications, markRead, addNotification, behaviors, addBehaviorLog, updatePetLicense, getLicenseHistory, updateUser, healthRecords, addHealthRecord, expenses, addExpense }}>
+        <PetContext.Provider value={{
+            user, login, logout, deleteAccount,
+            pets, addPet, removePet, updatePetDiet, updatePetLicense,
+            notifications, markRead, addNotification,
+            behaviors, addBehaviorLog, removeBehavior,
+            healthRecords, addHealthRecord,
+            expenses, addExpense,
+            updateUser, getLicenseHistory,
+            supabase // expose client if needed
+        }}>
             {children}
         </PetContext.Provider>
     );

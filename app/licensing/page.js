@@ -24,10 +24,13 @@ export default function LicensingPage() {
 
     const handleUpdate = (e) => {
         e.preventDefault();
-        updatePetLicense(selectedPetIdx, { number: licenseNo, expiryDate });
+        const currentPet = pets[selectedPetIdx];
+        if (currentPet) {
+            updatePetLicense(currentPet.id, { number: licenseNo, expiryDate });
+        }
         setLicenseNo('');
         setExpiryDate('');
-        setHistory(getLicenseHistory()); // Update history view immediately
+        // History updates automatically via pet change
     };
 
     return (
@@ -94,9 +97,14 @@ export default function LicensingPage() {
                     <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', fontWeight: '700' }}>Active Licenses</h3>
                     <div style={{ display: 'grid', gap: '1rem' }}>
                         {pets.length > 0 ? (
-                            pets.map((pet, idx) => (
-                                <ReminderWidget key={idx} petName={pet.name} daysRemaining={pet.licenseDays || 0} />
-                            ))
+                            pets.map((pet, idx) => {
+                                let days = 0;
+                                if (pet.license_date) {
+                                    const diff = new Date(pet.license_date) - new Date();
+                                    days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+                                }
+                                return <ReminderWidget key={pet.id || idx} petName={pet.name} daysRemaining={days} />;
+                            })
                         ) : null}
                     </div>
                 </div>

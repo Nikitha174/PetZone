@@ -22,7 +22,7 @@ export default function DietSchedule({ value, onChange }) {
 
             {(value && value.length > 0) ? (
                 <div style={{ display: 'grid', gap: '0.5rem' }}>
-                    {value.map((item, i) => (
+                    {(Array.isArray(value) ? value : []).map((item, i) => (
                         <div key={i} className="card" style={{ padding: '0.75rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-highlight)', border: 'none' }}>
                             <span><strong>{item.time}</strong> · {item.food}</span>
                             <button type="button" onClick={() => onChange(value.filter((_, idx) => idx !== i))} style={{ color: 'var(--error)', background: 'none', fontSize: '1.25rem' }}>×</button>

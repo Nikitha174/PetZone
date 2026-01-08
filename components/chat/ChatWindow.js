@@ -1,9 +1,5 @@
 "use client";
 import { useState, useEffect, useRef } from 'react';
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-// Hardcoded API Key as requested
-const API_KEY = "AIzaSyD5uMfe4CUSz-c7NTrGun688EyzM06Az0c";
 
 export default function ChatWindow() {
     const [messages, setMessages] = useState([
@@ -31,50 +27,6 @@ export default function ChatWindow() {
         }
     };
 
-    const callGemini = async (userPrompt, userImage) => {
-        const genAI = new GoogleGenerativeAI(API_KEY);
-
-        // Priority list: Flash (Requested) -> Flash 001 (Stable) -> Pro 1.5 -> Legacy
-        const modelsToTry = ["gemini-2.0-flash-exp", "gemini-2.0-flash-001", "gemini-2.5-flash"];
-
-        let lastError = null;
-
-        for (const modelName of modelsToTry) {
-            try {
-                const model = genAI.getGenerativeModel({ model: modelName });
-
-                let promptParts = [userPrompt];
-                if (!userImage) {
-                    promptParts = ["You are a helpful expert pet assistant. Answer safely and accurately. Do NOT use markdown formatting (bold, italic, lists) or symbols like *. Provide clear, plain text only:", userPrompt];
-                } else {
-                    promptParts = ["You are a helpful pet assistant. Analyze this image and answer. If medical emergency, advise vet immediately. Do NOT use markdown formatting or symbols like *. Provide clear, plain text only.", userPrompt];
-                }
-
-                if (userImage) {
-                    const match = userImage.match(/^data:(.+);base64,(.+)$/);
-                    if (match) {
-                        promptParts.push({
-                            inlineData: {
-                                data: match[2],
-                                mimeType: match[1]
-                            }
-                        });
-                    }
-                }
-
-                const result = await model.generateContentStream(promptParts);
-                return result.stream;
-
-            } catch (err) {
-                console.warn(`Model ${modelName} failed, trying next...`, err.message);
-                lastError = err;
-            }
-        }
-
-        console.error("All Gemini models failed");
-        throw lastError;
-    };
-
     const handleSend = async (e) => {
         e.preventDefault();
         if (!input.trim() && !selectedImage) return;
@@ -86,52 +38,20 @@ export default function ChatWindow() {
         setIsTyping(true);
 
         try {
-            const stream = await callGemini(userMsg.content, userMsg.image);
+            const res = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: userMsg.content, image: userMsg.image })
+            });
 
-            // Add placeholder message for the assistant
-            setMessages(prev => [...prev, { role: 'assistant', content: "" }]);
-            setIsTyping(false); // Streaming started
+            const data = await res.json();
 
-            let fullText = "";
-            for await (const chunk of stream) {
-                const chunkText = chunk.text();
-                fullText += chunkText;
-
-                // Update the last message (assistant's) with accumulated text
-                setMessages(prev => {
-                    const newHistory = [...prev];
-                    const lastIndex = newHistory.length - 1;
-                    if (lastIndex >= 0 && newHistory[lastIndex].role === 'assistant') {
-                        newHistory[lastIndex].content = fullText.replace(/[*#`]/g, '');
-                    }
-                    return newHistory;
-                });
-            }
+            setIsTyping(false);
+            setMessages(prev => [...prev, { role: 'assistant', content: data.reply }]);
         } catch (err) {
             setIsTyping(false);
-            console.error(err);
-            // Fallback for errors
-            setTimeout(() => {
-                let friendlyError = "I'm having trouble connecting to my brain right now.";
-                const msg = err.message || "";
-
-                if (msg.includes("404")) friendlyError = "Error: Model not found (404). Tried multiple versions.";
-                else if (msg.includes("400")) friendlyError = "Error: Invalid API Key or Request (400).";
-                else if (msg.includes("429")) friendlyError = "Error: Quota Exceeded (429).";
-
-                const response = `${friendlyError}\n\n(Debug: ${msg})`;
-
-                // If there's an empty placeholder, fill it. Otherwise add new.
-                setMessages(prev => {
-                    const lastIndex = prev.length - 1;
-                    if (lastIndex >= 0 && prev[lastIndex].role === 'assistant' && prev[lastIndex].content === "") {
-                        const newHistory = [...prev];
-                        newHistory[lastIndex].content = response;
-                        return newHistory;
-                    }
-                    return [...prev, { role: 'assistant', content: response }];
-                });
-            }, 500);
+            console.error("Chat error:", err);
+            setMessages(prev => [...prev, { role: 'assistant', content: "I'm having trouble connecting to the server. Please check your internet connection." }]);
         }
     };
 
@@ -213,6 +133,7 @@ export default function ChatWindow() {
                         className="btn btn-secondary"
                         style={{ borderRadius: '50%', width: '50px', height: '50px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}
                         title="Upload Image"
+                        suppressHydrationWarning={true}
                     >
                         📷
                     </button>
@@ -222,6 +143,7 @@ export default function ChatWindow() {
                         onChange={e => setInput(e.target.value)}
                         placeholder="Ask anything..."
                         style={{ flex: 1, border: '1px solid var(--surface-border)', borderRadius: '2rem', paddingLeft: '1.5rem' }}
+                        suppressHydrationWarning={true}
                     />
                     <button type="submit" className="btn btn-primary" style={{ borderRadius: '50%', width: '50px', height: '50px', padding: 0 }} disabled={isTyping || (!input.trim() && !selectedImage)}>
                         ➤

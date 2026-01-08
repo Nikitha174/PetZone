@@ -1,4 +1,5 @@
 import { Inter } from "next/font/google";
+import GoogleAuthProviderWrapper from '@/components/auth/GoogleAuthProviderWrapper';
 import "./globals.css";
 
 import { PetProvider } from "@/context/PetContext";
@@ -14,9 +15,12 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <PetProvider>
-          {children}
-        </PetProvider>
+        <div className="bg-paw-pattern"></div>
+        <GoogleAuthProviderWrapper>
+          <PetProvider>
+            {children}
+          </PetProvider>
+        </GoogleAuthProviderWrapper>
       </body>
     </html>
   );

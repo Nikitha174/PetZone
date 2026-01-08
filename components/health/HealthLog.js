@@ -7,6 +7,7 @@ export default function HealthLog() {
     const [activeTab, setActiveTab] = useState('add');
 
     const [form, setForm] = useState({
+        petId: pets[0]?.id || '',
         petName: pets[0]?.name || '',
         type: 'Vaccination', // Vaccination, Med Check, Weight, Injury, Other
         title: '', // e.g. Rabies Shot
@@ -26,7 +27,7 @@ export default function HealthLog() {
     if (pets.length === 0) return <div className="card">Please add a pet first!</div>;
 
     const filteredRecords = healthRecords
-        .filter(r => r.petName === form.petName)
+        .filter(r => r.pet_id == form.petId)
         .sort((a, b) => new Date(b.date) - new Date(a.date));
 
     return (
@@ -56,11 +57,15 @@ export default function HealthLog() {
                         <div>
                             <label style={{ display: 'block', fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Select Pet</label>
                             <select
-                                value={form.petName}
-                                onChange={e => setForm({ ...form, petName: e.target.value })}
+                                value={form.petId}
+                                onChange={e => {
+                                    const selectedId = e.target.value;
+                                    const selectedPet = pets.find(p => p.id == selectedId);
+                                    setForm({ ...form, petId: selectedId, petName: selectedPet?.name || '' });
+                                }}
                                 style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid var(--surface-border)' }}
                             >
-                                {pets.map((p, i) => <option key={i} value={p.name}>{p.name}</option>)}
+                                {pets.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                             </select>
                         </div>
 
@@ -156,11 +161,15 @@ export default function HealthLog() {
                 <div style={{ display: 'grid', gap: '1rem' }}>
                     <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <select
-                            value={form.petName}
-                            onChange={e => setForm({ ...form, petName: e.target.value })}
+                            value={form.petId}
+                            onChange={e => {
+                                const selectedId = e.target.value;
+                                const selectedPet = pets.find(p => p.id == selectedId);
+                                setForm({ ...form, petId: selectedId, petName: selectedPet?.name || '' });
+                            }}
                             style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid var(--surface-border)' }}
                         >
-                            {pets.map((p, i) => <option key={i} value={p.name}>{p.name}</option>)}
+                            {pets.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
                         <span style={{ color: 'var(--text-muted)' }}>{filteredRecords.length} Records</span>
                     </div>

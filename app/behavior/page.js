@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { usePets } from '@/context/PetContext';
 
 export default function BehaviorPage() {
-    const { pets, behaviors, addBehaviorLog } = usePets();
+    const { pets, behaviors, addBehaviorLog, removeBehavior } = usePets();
     const [selectedPetIdx, setSelectedPetIdx] = useState(0);
     const [issue, setIssue] = useState('Barking');
 
@@ -18,11 +18,13 @@ export default function BehaviorPage() {
     }
 
     const currentPet = pets[selectedPetIdx];
-    const petBehaviors = behaviors.filter(b => b.petId === selectedPetIdx); // Using index as ID for demo
+    const petBehaviors = behaviors.filter(b => b.pet_id === currentPet?.id);
 
     const handleLog = (e) => {
         e.preventDefault();
-        addBehaviorLog(selectedPetIdx, issue);
+        if (currentPet) {
+            addBehaviorLog(currentPet.id, issue);
+        }
     };
 
     return (
@@ -75,9 +77,18 @@ export default function BehaviorPage() {
                                 <h4 style={{ fontWeight: '700', color: 'var(--text-main)' }}>{b.issue}</h4>
                                 <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{b.date}</span>
                             </div>
-                            <div style={{ background: 'var(--surface-highlight)', padding: '1rem', borderRadius: 'var(--radius-sm)', marginTop: '0.5rem' }}>
+                            <div style={{ background: 'var(--surface-highlight)', padding: '1rem', borderRadius: 'var(--radius-sm)', marginTop: '0.5rem', position: 'relative' }}>
+                                <button
+                                    onClick={() => {
+                                        if (confirm('Delete this record?')) removeBehavior(b.id);
+                                    }}
+                                    style={{ position: 'absolute', top: '10px', right: '10px', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.9rem' }}
+                                    title="Remove Entry"
+                                >
+                                    ✕
+                                </button>
                                 <strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.25rem', fontSize: '0.9rem' }}>💡 Suggested Remedy:</strong>
-                                <p style={{ fontSize: '0.95rem' }}>{b.remedy}</p>
+                                <p style={{ fontSize: '0.95rem', paddingRight: '1.5rem' }}>{b.remedy}</p>
                             </div>
                         </div>
                     ))

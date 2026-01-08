@@ -113,8 +113,12 @@ export default function Home() {
                 Sign Out
               </button>
             </div>
-            <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--primary), var(--secondary))', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '1.2rem', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}>
-              {user?.name?.[0] || 'G'}
+            <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--primary), var(--secondary))', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '1.2rem', boxShadow: '0 4px 10px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
+              {user?.picture ? (
+                <img src={user.picture} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                user?.name?.[0] || 'G'
+              )}
             </div>
           </div>
         </div>
@@ -138,10 +142,36 @@ export default function Home() {
         ) : (
           <div className="animate-enter delay-200" style={{ display: 'grid', gap: '2rem', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
             {pets.map((pet, idx) => {
-              // Simple Care Score Logic
-              let careScore = 70; // Base score
-              if (pet.nextMeal !== 'TBD' && pet.nextMeal !== '--:--') careScore += 15;
-              if (pet.licenseDays > 30) careScore += 15;
+              // 1. Calculate Next Meal from 'diet' array
+              let nextMealDisplay = "--:--";
+              if (Array.isArray(pet.diet) && pet.diet.length > 0) {
+                const now = new Date();
+                const currentHours = now.getHours();
+                const currentMinutes = now.getMinutes();
+                // Ensure diet is sorted clearly by time string "HH:MM"
+                const sortedMeals = [...pet.diet].sort((a, b) => a.time.localeCompare(b.time));
+
+                const upcoming = sortedMeals.find(m => {
+                  const [h, min] = m.time.split(':').map(Number);
+                  return (h > currentHours) || (h === currentHours && min > currentMinutes);
+                });
+
+                nextMealDisplay = upcoming ? upcoming.time : sortedMeals[0].time;
+              }
+
+              // 2. Calculate License Status
+              let licenseStatus = "Not Linked";
+              let daysLeft = null;
+              if (pet.license_date) {
+                const diff = new Date(pet.license_date) - new Date();
+                daysLeft = Math.ceil(diff / (1000 * 60 * 60 * 24));
+                licenseStatus = daysLeft < 0 ? 'Expired' : (daysLeft < 30 ? 'Expiring Soon' : 'Active');
+              }
+
+              // Care Score Logic
+              let careScore = 70;
+              if (nextMealDisplay !== "--:--") careScore += 15;
+              if (daysLeft && daysLeft > 30) careScore += 15;
 
               // Emoji Selection
               const emojis = {
@@ -152,16 +182,16 @@ export default function Home() {
                 'Hamster': '🐹',
                 'Sugar Glider': '🐿️'
               };
-              const petEmoji = emojis[pet.type] || '🐾';
+              const petEmoji = emojis[pet.species] || '🐾';
 
               return (
-                <div key={idx} className="card" style={{ padding: '0', overflow: 'hidden', border: 'none', boxShadow: 'var(--shadow-md)' }}>
+                <div key={pet.id || idx} className="card" style={{ padding: '0', overflow: 'hidden', border: 'none', boxShadow: 'var(--shadow-md)' }}>
                   <div style={{ background: `linear-gradient(135deg, ${idx % 2 === 0 ? '#ec4899' : '#8b5cf6'}, #fb923c)`, height: '150px', position: 'relative' }}>
                     <div className="floating" style={{ position: 'absolute', bottom: '-40px', left: '30px', width: '80px', height: '80px', borderRadius: '50%', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '3rem', boxShadow: 'var(--shadow-md)', border: '4px solid white' }}>
                       {petEmoji}
                     </div>
                     <div style={{ position: 'absolute', top: '1.5rem', right: '1.5rem', background: 'rgba(255,255,255,0.25)', padding: '0.4rem 1rem', borderRadius: '2rem', color: 'white', fontWeight: '800', backdropFilter: 'blur(5px)' }}>
-                      {pet.breed}
+                      {pet.breed || 'Unknown Breed'}
                     </div>
 
                     {/* Delete Button */}
@@ -169,7 +199,7 @@ export default function Home() {
                       onClick={(e) => {
                         e.stopPropagation();
                         if (confirm(`Are you sure you want to remove ${pet.name}?`)) {
-                          removePet(idx);
+                          removePet(pet.id);
                         }
                       }}
                       title="Remove Pet"
@@ -194,17 +224,17 @@ export default function Home() {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                       <div style={{ background: 'var(--surface-highlight)', padding: '1.2rem', borderRadius: 'var(--radius-sm)', transition: 'transform 0.2s' }} className="pop-on-hover">
                         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '1px', marginBottom: '0.4rem' }}>Next Meal</div>
-                        <div style={{ fontSize: '1.8rem', fontWeight: '900', color: 'var(--primary)' }}>{pet.nextMeal}</div>
+                        <div style={{ fontSize: '1.8rem', fontWeight: '900', color: 'var(--primary)' }}>{nextMealDisplay}</div>
                       </div>
                       <div style={{ background: 'var(--surface-highlight)', padding: '1.2rem', borderRadius: 'var(--radius-sm)' }} className="pop-on-hover">
                         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '1px', marginBottom: '0.4rem' }}>License Status</div>
-                        {pet.licenseDetails?.expiryDate ? (
+                        {licenseStatus !== "Not Linked" ? (
                           <div>
-                            <div style={{ fontSize: '1rem', fontWeight: '800', color: pet.licenseDays < 30 ? 'var(--error)' : 'var(--success)' }}>
-                              {pet.licenseDays < 0 ? 'Expired' : (pet.licenseDays < 30 ? 'Expiring Soon' : 'Active')}
+                            <div style={{ fontSize: '1rem', fontWeight: '800', color: licenseStatus === 'Expired' ? 'var(--error)' : (licenseStatus === 'Expiring Soon' ? 'var(--warning)' : 'var(--success)') }}>
+                              {licenseStatus}
                             </div>
                             <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                              {pet.licenseDays} days left
+                              {daysLeft} days left
                             </div>
                           </div>
                         ) : (

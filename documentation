@@ -1,0 +1,47 @@
+# How to Set Up Google Sign-In
+
+To make the "Sign in with Google" button work, you need to get a **Client ID** from Google. Follow these steps:
+
+## Step 1: Create a Google Cloud Project
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/).
+2. Click on the project dropdown at the top left (it might say "Select a project").
+3. Click **"New Project"**.
+4. Give it a name (e.g., "PetZone App") and click **Create**.
+
+## Step 2: Configure the OAuth Consent Screen
+1. In the left sidebar, go to **APIs & Services** > **OAuth consent screen**.
+2. Select **External** (unless you are a G-Suite user testing internally) and click **Create**.
+3. Fill in the required app information:
+   - **App name**: PetZone
+   - **User support email**: Select your email.
+   - **Developer contact information**: Enter your email.
+4. Click **Save and Continue** through the "Scopes" and "Test Users" sections (you can leave them as defaults for now).
+5. On the Summary page, click **Back to Dashboard**.
+
+## Step 3: Create Credentials (The Client ID)
+1. In the left sidebar, click **Credentials**.
+2. Click **+ CREATE CREDENTIALS** at the top and select **OAuth client ID**.
+3. For **Application type**, select **Web application**.
+4. Name it something like "PetZone Web Client".
+5. **Crucial Step**: Under **Authorized JavaScript origins**, click **ADD URI** and enter:
+   - `http://localhost:3000`
+6. Under **Authorized redirect URIs**, click **ADD URI** and enter:
+   - `http://localhost:3000`
+7. Click **Create**.
+
+## Step 4: Copy the Client ID
+1. A popup will appear with your "Client ID" and "Client Secret".
+2. **Copy the Client ID** (it looks like `123456789-abcde...apps.googleusercontent.com`).
+3. You do *not* need the Client Secret for this frontend-only implementation.
+
+## Step 5: Add it to Your Project
+1. Open the file named `.env.local` in your project folder.
+2. Paste your ID like this:
+   ```env
+   NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-copied-client-id-here
+   ```
+3. **Restart your development server**:
+   - Stop the current one (Ctrl+C).
+   - Run `npm run dev` again.
+
+Done! The Google Login button should now work.

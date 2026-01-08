@@ -40,7 +40,9 @@ function ScheduleContent() {
     const safePet = pets[safePetIndex];
 
     const handleDietChange = (newDiet) => {
-        updatePetDiet(safePetIndex, newDiet);
+        if (safePet && safePet.id) {
+            updatePetDiet(safePet.id, newDiet);
+        }
     };
 
     const getPetEmoji = (type) => {
@@ -95,7 +97,7 @@ function ScheduleContent() {
                                 }}
                             >
                                 <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>
-                                    {getPetEmoji(pet.type)}
+                                    {getPetEmoji(pet.species)}
                                 </span>
                                 <span>{pet.name}</span>
                                 {idx === safePetIndex && <span style={{ marginLeft: 'auto', color: 'var(--primary)' }}>•</span>}
@@ -108,7 +110,7 @@ function ScheduleContent() {
                 <div style={{ padding: '3rem', flex: 1 }}>
                     <div className="animate-enter" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '3rem' }}>
                         <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--primary), var(--secondary))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '3rem', color: 'white', boxShadow: '0 10px 20px rgba(0,0,0,0.1)' }}>
-                            {getPetEmoji(safePet.type)}
+                            {getPetEmoji(safePet.species)}
                         </div>
                         <div>
                             <h2 style={{ fontSize: '2.5rem', fontWeight: '900', lineHeight: 1.1, marginBottom: '0.5rem' }}>{safePet.name}</h2>

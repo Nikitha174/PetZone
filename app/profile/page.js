@@ -3,7 +3,7 @@ import { usePets } from '@/context/PetContext';
 import { useState } from 'react';
 
 export default function ProfilePage() {
-    const { user, pets, removePet, updateUser } = usePets();
+    const { user, pets, removePet, updateUser, deleteAccount } = usePets();
 
     const [formData, setFormData] = useState({
         name: user?.name || '',
@@ -36,8 +36,12 @@ export default function ProfilePage() {
 
             <div className="card animate-enter">
                 <div className="flex-stack-mobile items-center-mobile text-center-mobile" style={{ gap: '1.5rem', marginBottom: '2rem', paddingBottom: '2rem', borderBottom: '1px solid var(--surface-border)' }}>
-                    <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--primary), var(--secondary))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2.5rem', color: 'white', fontWeight: 'bold' }}>
-                        {user.name[0]}
+                    <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--primary), var(--secondary))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2.5rem', color: 'white', fontWeight: 'bold', overflow: 'hidden' }}>
+                        {user.picture ? (
+                            <img src={user.picture} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                            user.name[0]
+                        )}
                     </div>
                     <div>
                         <h2 style={{ fontSize: '1.8rem', marginBottom: '0.25rem' }}>{user.name}</h2>
@@ -107,7 +111,7 @@ export default function ProfilePage() {
                                                     'Fish': '🐟',
                                                     'Hamster': '🐹',
                                                     'Sugar Glider': '🐿️'
-                                                }[pet.type] || '🐾'}
+                                                }[pet.species] || '🐾'}
                                             </div>
                                             <div>
                                                 <div style={{ fontWeight: '700' }}>{pet.name}</div>
@@ -117,7 +121,7 @@ export default function ProfilePage() {
                                         <button
                                             onClick={() => {
                                                 if (confirm(`Are you sure you want to remove ${pet.name}?`)) {
-                                                    removePet(idx);
+                                                    removePet(pet.id);
                                                 }
                                             }}
                                             style={{ color: 'var(--error)', background: 'white', padding: '0.5rem 1rem', borderRadius: '2rem', fontSize: '0.85rem', fontWeight: '600', border: '1px solid #fee2e2' }}
@@ -132,6 +136,30 @@ export default function ProfilePage() {
                         )}
                     </div>
                 </div>
+            </div>
+
+            {/* Danger Zone */}
+            <div className="card animate-enter" style={{ marginTop: '2rem', border: '1px solid #fee2e2' }}>
+                <h3 style={{ fontSize: '1.25rem', marginBottom: '1rem', fontWeight: 'bold', color: 'var(--error)' }}>Danger Zone</h3>
+                <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
+                    Once you delete your account, there is no going back. Please be certain.
+                </p>
+                <button
+                    onClick={() => {
+                        if (confirm('Are you absolutely sure? This will permanently delete your account and all associated data.')) {
+                            deleteAccount();
+                        }
+                    }}
+                    className="btn"
+                    style={{
+                        background: '#fee2e2',
+                        color: 'var(--error)',
+                        width: '100%',
+                        border: 'none'
+                    }}
+                >
+                    Delete My Account
+                </button>
             </div>
         </main>
     );
