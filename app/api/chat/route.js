@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export async function POST(req) {
@@ -9,14 +8,8 @@ export async function POST(req) {
         const { message, image } = await req.json();
         userMessage = message || "";
 
-        // --- ROUTING LOGIC ---
-        // 1. If Image is present -> Use Gemini (Robust Fallback Chain)
-        // 2. If Text Only -> Use Groq (Speed)
-        if (image) {
-            return await handleGeminiResponse(message, image);
-        } else {
-            return await handleGroqResponse(message);
-        }
+        // --- ALWAYS USE GEMINI ---
+        return await handleGeminiResponse(message, image);
 
     } catch (error) {
         console.error("Hybrid Chat Error Details:", {
@@ -86,36 +79,6 @@ async function handleGeminiResponse(message, image) {
     }
 
     throw new Error(`All Gemini Vision models failed. Last error: ${lastError?.message}. Please check your API Key & Region support.`);
-}
-
-// -----------------------------------------------------
-// ⚡ HANDLER: Groq (Fast Text)
-// -----------------------------------------------------
-async function handleGroqResponse(message) {
-    // Try Groq Key first, but maintain robustness
-    const apiKey = process.env.GROQ_API_KEY;
-
-    // If no Groq Key, fallback to Gemini for text too (so we don't crash)
-    if (!apiKey) {
-        console.log("No Groq Key found, falling back to Gemini for text.");
-        return await handleGeminiResponse(message, null);
-    }
-
-    const openai = new OpenAI({
-        apiKey: apiKey,
-        baseURL: "https://api.groq.com/openai/v1",
-    });
-
-    const completion = await openai.chat.completions.create({
-        model: "llama-3.3-70b-versatile",
-        messages: [
-            { role: "system", content: "You are a helpful expert pet assistant. Answer safely and accurately in 2-3 sentences." },
-            { role: "user", content: message }
-        ],
-        max_tokens: 300,
-    });
-
-    return NextResponse.json({ reply: completion.choices[0].message.content });
 }
 
 // 🔁 Smart fallback (Rich Logic Preserved)
