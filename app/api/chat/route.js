@@ -9,10 +9,10 @@ export async function POST(req) {
         userMessage = message || "";
 
         // --- ROUTING LOGIC ---
-        // 1. If Image is present -> Use Groq Vision (Llama 3.2 Vision)
-        // 2. If Text Only -> Use Groq Text (Llama 3.3)
+        // 1. If Image is present -> Use Gemini (Robust Fallback Chain)
+        // 2. If Text Only -> Use Groq (Speed)
         if (image) {
-            return await handleGroqVisionResponse(message, image);
+            return await handleGeminiResponse(message, image);
         } else {
             return await handleGroqResponse(message);
         }
@@ -30,63 +30,61 @@ export async function POST(req) {
 }
 
 // -----------------------------------------------------
-// 👁️ HANDLER: Groq Vision (Robust Multi-Model Support)
+// 🎨 HANDLER: Gemini (Vision/Multimodal) - With Fallback
 // -----------------------------------------------------
-async function handleGroqVisionResponse(message, image) {
-    const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) throw new Error("Missing GROQ_API_KEY");
+async function handleGeminiResponse(message, image) {
+    const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
 
-    const openai = new OpenAI({
-        apiKey: apiKey,
-        baseURL: "https://api.groq.com/openai/v1",
-    });
+    const genAI = new GoogleGenerativeAI(apiKey);
 
-    // List of potential vision models to try in order of preference
-    const VISION_MODELS = [
-        "llama-3.2-90b-vision-preview",
-        "llama-3.2-11b-vision-preview",
-        "llama-3-vision-alpha" // Historical fallback
+    // Priority list of models to try
+    const GEMINI_MODELS = [
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-flash-001",
+        "gemini-1.5-pro",
+        "gemini-pro-vision"
     ];
+
+    const parts = [];
+    if (message) parts.push(message);
+
+    // Extract base64
+    if (image) {
+        const matches = image.match(/^data:(.+);base64,(.+)$/);
+        if (!matches) throw new Error("Invalid image format");
+
+        parts.push({
+            inlineData: {
+                data: matches[2],
+                mimeType: matches[1]
+            }
+        });
+    }
+
 
     let lastError = null;
 
-    for (const modelName of VISION_MODELS) {
+    for (const modelName of GEMINI_MODELS) {
         try {
-            console.log(`Attempting Vision with model: ${modelName}`);
-            const completion = await openai.chat.completions.create({
-                model: modelName,
-                messages: [
-                    {
-                        role: "user",
-                        content: [
-                            { type: "text", text: message || "Analyze this image." },
-                            {
-                                type: "image_url",
-                                image_url: {
-                                    url: image,
-                                },
-                            },
-                        ],
-                    },
-                ],
-                max_tokens: 300,
-            });
+            console.log(`Attempting Gemini Vision with: ${modelName}`);
+            const model = genAI.getGenerativeModel({ model: modelName });
 
-            // If successful, return immediately
-            return NextResponse.json({ reply: completion.choices[0].message.content });
+            const result = await model.generateContent(parts);
+            const response = await result.response;
+            const text = response.text();
+
+            return NextResponse.json({ reply: text });
 
         } catch (error) {
-            console.warn(`Model ${modelName} failed:`, error.message);
+            console.warn(`Gemini Model ${modelName} failed:`, error.message);
             lastError = error;
-
-            // If it's not a model availability error (e.g. invalid key), maybe stop? 
-            // But usually 400/404 for model is safe to retry next.
-            if (error.status === 401) throw error; // Don't retry invalid auth
+            // Continue to next model
         }
     }
 
-    // If all failed
-    throw new Error(`All vision models failed. Last error: ${lastError?.message}`);
+    throw new Error(`All Gemini Vision models failed. Last error: ${lastError?.message}. Please check your API Key & Region support.`);
 }
 
 // -----------------------------------------------------
