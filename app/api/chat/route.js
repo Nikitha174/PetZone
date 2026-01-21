@@ -1,15 +1,67 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+// Simple in-memory rate limiter
+const rateLimitMap = new Map();
+const RATE_LIMIT_WINDOW = 60000; // 1 minute
+const MAX_REQUESTS_PER_WINDOW = 10;
+
+function checkRateLimit(identifier) {
+    const now = Date.now();
+    const userRequests = rateLimitMap.get(identifier) || [];
+
+    // Remove old requests outside the window
+    const recentRequests = userRequests.filter(time => now - time < RATE_LIMIT_WINDOW);
+
+    if (recentRequests.length >= MAX_REQUESTS_PER_WINDOW) {
+        return false; // Rate limit exceeded
+    }
+
+    recentRequests.push(now);
+    rateLimitMap.set(identifier, recentRequests);
+    return true; // Request allowed
+}
+
 export async function POST(req) {
     let userMessage = "";
 
     try {
+        // Check rate limit
+        const identifier = req.headers.get('x-forwarded-for') || 'default';
+        if (!checkRateLimit(identifier)) {
+            return NextResponse.json({
+                reply: "⏳ **Rate limit exceeded.** Please wait a minute before sending more messages. This helps preserve API quota for all users."
+            }, { status: 429 });
+        }
+
         const { message, image } = await req.json();
         userMessage = message || "";
 
-        // --- ALWAYS USE GEMINI ---
-        return await handleGeminiResponse(message, image);
+        // STRATEGY: 
+        // 1. Text Only -> Groq (Faster, less likely to fail)
+        // 2. Image -> Gemini (Better vision) -> Fallback to Groq Vision
+
+        if (!image) {
+            console.log("Text-only request: Creating express lane to Groq...");
+            return await handleGroqResponse(message, null);
+        }
+
+        // --- IMAGE HANDLING ---
+        // Try Gemini first for Vision
+        try {
+            return await handleGeminiResponse(message, image);
+        } catch (geminiError) {
+            console.warn("Gemini Vision failed, trying Groq Vision fallback:", geminiError.message);
+
+            // Try Groq Vision as fallback
+            try {
+                return await handleGroqResponse(message, image);
+            } catch (groqError) {
+                console.warn("Groq Vision also failed:", groqError.message);
+                // Report the GROQ error since that was the last attempt
+                throw new Error(`Vision Analysis Failed. Gemini Error: ${geminiError.message}. Fallback (Groq) Error: ${groqError.message}`);
+            }
+        }
 
     } catch (error) {
         console.error("Hybrid Chat Error Details:", {
@@ -32,17 +84,22 @@ async function handleGeminiResponse(message, image) {
 
     const genAI = new GoogleGenerativeAI(apiKey);
 
-    // Priority list of models to try
+    // Multiple models to handle quota limits
+    // Gemini 1.5 models natively support text and images (multimodal)
     const GEMINI_MODELS = [
-        "gemini-1.5-flash",
         "gemini-1.5-flash-latest",
-        "gemini-1.5-flash-001",
-        "gemini-1.5-pro",
-        "gemini-pro-vision"
+        "gemini-1.5-flash-001"
     ];
 
+    // System instruction for consistent formatting
+    const SYSTEM_INSTRUCTION = "You are a helpful pet expert. IMPORTANT formatting rule: Do NOT use bullet points or asterisks (*) for lists. Use numbered lists (1., 2.) or simple paragraphs instead. Keep responses concise.";
+
     const parts = [];
-    if (message) parts.push(message);
+
+    // Always include instruction + message (or default)
+    // This ensures Gemini has context and knows the formatting rules even for image-only requests
+    const effectiveMessage = message || "Please analyze this image and tell me if you see any pet-related issues.";
+    parts.push(SYSTEM_INSTRUCTION + "\n\nUser Query: " + effectiveMessage);
 
     // Extract base64
     if (image) {
@@ -79,6 +136,97 @@ async function handleGeminiResponse(message, image) {
     }
 
     throw new Error(`All Gemini Vision models failed. Last error: ${lastError?.message}. Please check your API Key & Region support.`);
+}
+
+// -----------------------------------------------------
+// 🎨 HANDLER: Groq (Fallback with vision support)
+// -----------------------------------------------------
+async function handleGroqResponse(message, image) {
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) throw new Error("Missing GROQ_API_KEY");
+
+    // Select models based on request type
+    let GROQ_MODELS = [];
+
+    if (image) {
+        GROQ_MODELS = [
+            "llama-3.2-11b-vision-preview"
+            // 90b vision preview is decommissioned
+        ];
+    } else {
+        // Text optimized models
+        GROQ_MODELS = [
+            "llama-3.3-70b-versatile", // Latest stable high-performance
+            "llama-3.1-8b-instant"     // Super fast low-latency
+        ];
+    }
+
+    let lastError = null;
+
+    for (const modelName of GROQ_MODELS) {
+        try {
+            console.log(`Attempting Groq with: ${modelName}`);
+
+            const messages = [];
+            const INSTRUCTION = "IMPORTANT: Do NOT use bullet points or asterisks (*). Use numbered lists or paragraphs.";
+
+            if (image) {
+                // GROQ VISION DOES NOT SUPPORT SYSTEM MESSAGES
+                // Append instruction to user text instead
+                const textContent = (message || "Analyze this image") + "\n\n" + INSTRUCTION;
+
+                messages.push({
+                    role: "user",
+                    content: [
+                        { type: "text", text: textContent },
+                        { type: "image_url", image_url: { url: image } }
+                    ]
+                });
+            } else {
+                // Text Mode: System role is fine
+                messages.push({
+                    role: "system",
+                    content: "You are a helpful pet expert. " + INSTRUCTION
+                });
+
+                messages.push({
+                    role: "user",
+                    content: message
+                });
+            }
+
+            const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: modelName,
+                    messages: messages,
+                    temperature: 0.7,
+                    max_tokens: 1024
+                })
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Groq API error: ${response.status} - ${errorText}`);
+            }
+
+            const data = await response.json();
+            const reply = data.choices[0]?.message?.content || "No response";
+
+            return NextResponse.json({ reply });
+
+        } catch (error) {
+            console.warn(`Groq Model ${modelName} failed:`, error.message);
+            lastError = error;
+            // Continue to next model
+        }
+    }
+
+    throw new Error(`All Groq models failed. Last error: ${lastError?.message}`);
 }
 
 // 🔁 Smart fallback (Rich Logic Preserved)

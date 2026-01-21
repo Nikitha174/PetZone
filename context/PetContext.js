@@ -142,14 +142,14 @@ export function PetProvider({ children }) {
             name: pet.name,
             species: pet.species,
             breed: pet.breed,
-            age: pet.age,
-            weight: pet.weight,
+            age: pet.age && pet.age !== '' ? parseFloat(pet.age) : null,
+            weight: pet.weight && pet.weight !== '' ? parseFloat(pet.weight) : null,
             diet: JSON.stringify(pet.diet || []) // Store complex objects as JSON string if simple schema
         }]).select();
 
         if (error) {
-            console.error(error);
-            addNotification('Error', 'Failed to add pet.');
+            console.error('Add pet error:', error);
+            addNotification('Error', error.message || 'Failed to add pet.');
             return;
         }
 
@@ -218,8 +218,13 @@ export function PetProvider({ children }) {
         }]).select();
 
         if (error) {
-            console.error(error);
-            addNotification('Error', 'Failed to log behavior.');
+            console.error('Behavior log insert error:', {
+                message: error.message,
+                details: error.details,
+                hint: error.hint,
+                code: error.code
+            });
+            addNotification('Error', error.message || 'Failed to log behavior.');
         } else if (data) {
             setBehaviors(prev => [data[0], ...prev]);
             addNotification('Behavior Logged', 'Remedy generated and saved.');
@@ -238,6 +243,13 @@ export function PetProvider({ children }) {
     };
 
     const addHealthRecord = async (record) => {
+        // Check if user is authenticated
+        if (!user) {
+            console.error('User not authenticated');
+            addNotification('Error', 'You must be logged in to add health records.');
+            return;
+        }
+
         // Resolve petId from petName if needed, but better to pass petId directly.
         // Assuming record has petId or we find it.
         let targetPetId = record.petId;
@@ -246,38 +258,83 @@ export function PetProvider({ children }) {
             if (p) targetPetId = p.id;
         }
 
-        const { data, error } = await supabase.from('health_records').insert([{
+        // Validate that we have a pet ID
+        if (!targetPetId) {
+            console.error('No pet ID found for health record:', record);
+            addNotification('Error', 'Please select a valid pet.');
+            return;
+        }
+
+        // Prepare the data to insert
+        // Convert empty strings to null for numeric fields
+        const insertData = {
             user_id: user.id,
             pet_id: targetPetId,
             type: record.type,
-            title: record.title,
+            title: record.title || null,
             date: record.date,
             next_due: record.nextDue || null,
-            notes: record.notes,
-            weight: record.weight
-        }]).select();
+            notes: record.notes || null,
+            weight: record.weight && record.weight !== '' ? parseFloat(record.weight) : null
+        };
+
+        // Debug log the data being sent
+        console.log('Attempting to insert health record:', insertData);
+
+        const { data, error } = await supabase.from('health_records').insert([insertData]).select();
 
         if (error) {
-            console.error(error);
-            addNotification('Error', 'Failed to save health record.');
+            // Log the full error object with multiple methods
+            console.error('Health record insert error - Full object:', error);
+            console.error('Health record insert error - Stringified:', JSON.stringify(error, null, 2));
+            console.error('Health record insert error - Properties:', {
+                message: error.message,
+                details: error.details,
+                hint: error.hint,
+                code: error.code,
+                statusCode: error.statusCode,
+                statusText: error.statusText
+            });
+
+            // Try to get a meaningful error message
+            let errorMessage = 'Failed to save health record.';
+            if (error.message) {
+                errorMessage = error.message;
+            } else if (error.details) {
+                errorMessage = error.details;
+            } else if (error.hint) {
+                errorMessage = error.hint;
+            }
+
+            addNotification('Error', errorMessage);
         } else if (data) {
+            console.log('Health record saved successfully:', data[0]);
             setHealthRecords(prev => [data[0], ...prev]);
             addNotification('Health Record Saved', `${record.type} recorded.`);
+        } else {
+            // Neither data nor error - unusual case
+            console.warn('Health record insert completed but no data or error returned');
+            addNotification('Warning', 'Record may not have been saved. Please check your health records.');
         }
     };
 
     const addExpense = async (record) => {
         const { data, error } = await supabase.from('expenses').insert([{
             user_id: user.id,
-            amount: record.amount,
+            amount: parseFloat(record.amount) || 0,
             category: record.category,
             date: record.date,
-            description: record.note // Map 'note' from UI to 'description' in DB
+            description: record.note || null // Map 'note' from UI to 'description' in DB
         }]).select();
 
         if (error) {
-            console.error(error);
-            addNotification('Error', 'Failed to save expense.');
+            console.error('Expense insert error:', {
+                message: error.message,
+                details: error.details,
+                hint: error.hint,
+                code: error.code
+            });
+            addNotification('Error', error.message || 'Failed to save expense.');
         } else if (data) {
             setExpenses(prev => [data[0], ...prev]);
             addNotification('Expense Added', `₹${record.amount} added to budget.`);

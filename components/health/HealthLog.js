@@ -1,5 +1,5 @@
 "use client";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { usePets } from '@/context/PetContext';
 
 export default function HealthLog() {
@@ -7,8 +7,8 @@ export default function HealthLog() {
     const [activeTab, setActiveTab] = useState('add');
 
     const [form, setForm] = useState({
-        petId: pets[0]?.id || '',
-        petName: pets[0]?.name || '',
+        petId: '',
+        petName: '',
         type: 'Vaccination', // Vaccination, Med Check, Weight, Injury, Other
         title: '', // e.g. Rabies Shot
         date: new Date().toISOString().split('T')[0],
@@ -16,6 +16,17 @@ export default function HealthLog() {
         notes: '',
         weight: ''
     });
+
+    // Initialize form with first pet when pets are loaded
+    useEffect(() => {
+        if (pets.length > 0 && !form.petId) {
+            setForm(prev => ({
+                ...prev,
+                petId: pets[0].id,
+                petName: pets[0].name
+            }));
+        }
+    }, [pets]);
 
     const handleSubmit = (e) => {
         e.preventDefault();
