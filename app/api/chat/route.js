@@ -84,11 +84,11 @@ async function handleGeminiResponse(message, image) {
 
     const genAI = new GoogleGenerativeAI(apiKey);
 
-    // Multiple models to handle quota limits
     // Gemini 1.5 models natively support text and images (multimodal)
     const GEMINI_MODELS = [
-        "gemini-1.5-flash-latest",
-        "gemini-1.5-flash-001"
+        "gemini-1.5-flash",
+        "gemini-2.0-flash-exp",
+        "gemini-1.5-pro"
     ];
 
     // System instruction for consistent formatting
@@ -150,8 +150,8 @@ async function handleGroqResponse(message, image) {
 
     if (image) {
         GROQ_MODELS = [
-            "llama-3.2-11b-vision-preview"
-            // 90b vision preview is decommissioned
+            "llama-3.2-11b-vision-preview", // Commonly available
+            "llama-3.2-90b-vision-preview"
         ];
     } else {
         // Text optimized models
@@ -168,7 +168,7 @@ async function handleGroqResponse(message, image) {
             console.log(`Attempting Groq with: ${modelName}`);
 
             const messages = [];
-            const INSTRUCTION = "IMPORTANT: Do NOT use bullet points or asterisks (*). Use numbered lists or paragraphs.";
+            const INSTRUCTION = "IMPORTANT: Do NOT use bullet points or asterisks (*). Use numbered lists or paragraphs. Keep responses concise.";
 
             if (image) {
                 // GROQ VISION DOES NOT SUPPORT SYSTEM MESSAGES
