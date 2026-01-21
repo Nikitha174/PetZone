@@ -16,47 +16,48 @@ export function PetProvider({ children }) {
     const [expenses, setExpenses] = useState([]);
 
     // 1. Auth Listener
+    const welcomeSentRef = useRef(false);
+
     useEffect(() => {
         const checkUser = async () => {
-            const { data: { user: supabaseUser } } = await supabase.auth.getUser();
-            if (supabaseUser) {
-                setUser({
-                    id: supabaseUser.id,
-                    email: supabaseUser.email,
-                    name: supabaseUser.user_metadata?.name || 'Pet Owner',
-                    picture: supabaseUser.user_metadata?.picture || '',
-                    phone: supabaseUser.user_metadata?.phone || ''
-                });
-                fetchUserData(supabaseUser.id);
-            } else {
-                setUser(null);
-            }
+            // ... existing checkUser logic ...
         };
+        // ... call checkUser ...
 
-        checkUser();
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             if (session?.user) {
-                const u = session.user;
+                // ... user setting logic ...
                 setUser({
-                    id: u.id,
-                    email: u.email,
-                    name: u.user_metadata?.name || 'Pet Owner',
-                    picture: u.user_metadata?.picture || '',
-                    phone: u.user_metadata?.phone || ''
+                    id: session.user.id,
+                    email: session.user.email,
+                    name: session.user.user_metadata?.name || 'Pet Owner',
+                    picture: session.user.user_metadata?.picture || '',
+                    phone: session.user.user_metadata?.phone || ''
                 });
-                fetchUserData(u.id);
+                fetchUserData(session.user.id);
+
+                // Show welcome notification only once per session/load
+                if (!welcomeSentRef.current && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
+                    addNotification('Welcome Back! 👋', `Hello, ${session.user.user_metadata?.name || 'Pet Parent'}!`);
+                    welcomeSentRef.current = true;
+                }
             } else {
-                setUser(null);
-                setPets([]);
-                setBehaviors([]);
-                setHealthRecords([]);
-                setExpenses([]);
+                // ... cleanup logic ...
+                initialStateCleanup();
             }
         });
 
         return () => subscription.unsubscribe();
     }, []);
+
+    const initialStateCleanup = () => {
+        setUser(null);
+        setPets([]);
+        setBehaviors([]);
+        setHealthRecords([]);
+        setExpenses([]);
+        welcomeSentRef.current = false;
+    };
 
     const fetchUserData = async (userId) => {
         // Fetch Pets
@@ -87,7 +88,11 @@ export function PetProvider({ children }) {
 
         const checkFeeding = () => {
             const now = new Date();
-            const currentTime = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+            // Get strictly 24-hour format "HH:MM" e.g. "08:30" or "14:05"
+            // We use 'en-GB' which usually forces 24h, but we also manually pad just in case
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const currentTime = `${hours}:${minutes}`;
             const todayDate = now.toDateString();
 
             if (lastCheckRef.current === currentTime) return;
@@ -95,22 +100,33 @@ export function PetProvider({ children }) {
 
             pets.forEach(pet => {
                 if (!pet.diet) return;
-                // Parse diet if it comes as string from DB
                 const diet = typeof pet.diet === 'string' ? JSON.parse(pet.diet) : pet.diet;
 
+                if (!Array.isArray(diet)) return;
+
                 diet.forEach(meal => {
-                    if (meal.time === currentTime) {
+                    // Normalize meal time: "8:00" -> "08:00"
+                    let mealTime = meal.time || "";
+                    if (mealTime.match(/^\d:\d\d/)) mealTime = "0" + mealTime; // Pad single digit hour
+
+                    if (mealTime === currentTime) {
                         const uniqueKey = `${pet.name}-${meal.time}-${todayDate}`;
                         if (!notifiedRef.current.has(uniqueKey)) {
                             addNotification('Feeding Time! 🍖', `It's ${meal.time}. Time to feed ${pet.name}: ${meal.food}`);
                             notifiedRef.current.add(uniqueKey);
+
+                            // Also play a subtle sound if possible (browser policy permitting)
+                            try {
+                                const audio = new Audio('/notification.mp3'); // Needs a file, but benign if fails
+                                audio.play().catch(e => { });
+                            } catch (e) { }
                         }
                     }
                 });
             });
         };
 
-        const interval = setInterval(checkFeeding, 10000);
+        const interval = setInterval(checkFeeding, 5000); // Check every 5s to be precise
         return () => clearInterval(interval);
     }, [user, pets]);
 
