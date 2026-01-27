@@ -149,7 +149,9 @@ export default function Home() {
                 const currentHours = now.getHours();
                 const currentMinutes = now.getMinutes();
                 // Ensure diet is sorted clearly by time string "HH:MM"
-                const sortedMeals = [...pet.diet].sort((a, b) => a.time.localeCompare(b.time));
+                const sortedMeals = [...pet.diet]
+                  .filter(m => m && m.time)
+                  .sort((a, b) => a.time.localeCompare(b.time));
 
                 const upcoming = sortedMeals.find(m => {
                   const [h, min] = m.time.split(':').map(Number);

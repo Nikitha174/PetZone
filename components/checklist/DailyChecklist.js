@@ -34,7 +34,38 @@ export default function DailyChecklist() {
         const today = new Date().toDateString();
         const saved = localStorage.getItem(`checklist_${today}`);
         if (saved) {
-            setTasks(JSON.parse(saved));
+            try {
+                let parsedTasks = JSON.parse(saved);
+
+                // Deduplicate and Sanitize IDs
+                const uniqueTasks = [];
+                const seenSignatures = new Set();
+                const seenIds = new Set();
+
+                parsedTasks.forEach(task => {
+                    // Create a signature based on content to find deep duplicates
+                    // Normalize values to avoid subtle mismatches
+                    const signature = `${task.petName?.trim()}-${task.category}-${task.time}-${task.details?.trim()}`;
+
+                    if (!seenSignatures.has(signature)) {
+                        seenSignatures.add(signature);
+
+                        // Fix ID if missing or duplicate
+                        let newId = task.id;
+                        if (!newId || seenIds.has(newId)) {
+                            newId = crypto.randomUUID ? crypto.randomUUID() : Date.now() + Math.random();
+                        }
+                        seenIds.add(newId);
+
+                        uniqueTasks.push({ ...task, id: newId });
+                    }
+                });
+
+                setTasks(uniqueTasks);
+            } catch (e) {
+                console.error("Failed to parse checklist tasks", e);
+                setTasks([]);
+            }
         }
         // Initialize pet name if available
         if (pets.length > 0 && !newTask.petName) {
@@ -61,9 +92,10 @@ export default function DailyChecklist() {
 
     useEffect(() => {
         const todayStr = new Date().toDateString();
-        if (tasks.length > 0) {
-            localStorage.setItem(`checklist_${todayStr}`, JSON.stringify(tasks));
+        // Save tasks even if empty to ensure deletions persist
+        localStorage.setItem(`checklist_${todayStr}`, JSON.stringify(tasks));
 
+        if (tasks.length > 0) {
             // Streak Logic
             const allDone = tasks.every(t => t.completed);
             const lastDate = localStorage.getItem('pet_streak_date');
@@ -86,7 +118,7 @@ export default function DailyChecklist() {
     const addTask = (e) => {
         e.preventDefault();
         const task = {
-            id: Date.now(),
+            id: crypto.randomUUID ? crypto.randomUUID() : Date.now() + Math.random(),
             ...newTask,
             completed: false
         };
@@ -112,47 +144,73 @@ export default function DailyChecklist() {
 
     const autoFill = () => {
         const newTasks = [];
+        const generateId = () => crypto.randomUUID ? crypto.randomUUID() : Date.now() + Math.random();
+
+        // Helper to check for duplicates
+        const isDuplicate = (t) => {
+            return tasks.some(existing =>
+                existing.petName === t.petName &&
+                existing.category === t.category &&
+                existing.time === t.time
+            ) || newTasks.some(added =>
+                added.petName === t.petName &&
+                added.category === t.category &&
+                added.time === t.time
+            );
+        };
 
         pets.forEach(pet => {
             // 1. Feeding Tasks (from Diet Schedule)
             if (pet.diet && pet.diet.length > 0) {
                 pet.diet.forEach(meal => {
-                    newTasks.push({
-                        id: Date.now() + Math.random(),
+                    const task = {
+                        id: generateId(),
                         category: 'Feeding 🥣',
                         petName: pet.name,
                         details: meal.food,
                         time: meal.time,
                         completed: false
-                    });
+                    };
+                    if (!isDuplicate(task)) newTasks.push(task);
                 });
             } else {
-                newTasks.push({
-                    id: Date.now() + Math.random(),
+                const task = {
+                    id: generateId(),
                     category: 'Feeding 🥣',
                     petName: pet.name,
                     details: 'Regular Meal',
                     time: '08:00',
                     completed: false
-                });
+                };
+                if (!isDuplicate(task)) newTasks.push(task);
             }
 
             // 2. Activity / Hygiene based on Type
             const type = pet.type ? pet.type.toLowerCase() : 'other';
             if (type === 'dog') {
-                newTasks.push({ id: Date.now() + Math.random(), category: 'Walk 🐕', petName: pet.name, details: 'Morning Walk (30 mins)', time: '07:30', completed: false });
-                newTasks.push({ id: Date.now() + Math.random(), category: 'Playtime 🎾', petName: pet.name, details: 'Fetch / Training', time: '18:30', completed: false });
+                const walkTask = { id: generateId(), category: 'Walk 🐕', petName: pet.name, details: 'Morning Walk (30 mins)', time: '07:30', completed: false };
+                if (!isDuplicate(walkTask)) newTasks.push(walkTask);
+
+                const playTask = { id: generateId(), category: 'Playtime 🎾', petName: pet.name, details: 'Fetch / Training', time: '18:30', completed: false };
+                if (!isDuplicate(playTask)) newTasks.push(playTask);
             } else if (type === 'cat') {
-                newTasks.push({ id: Date.now() + Math.random(), category: 'Grooming ✂️', petName: pet.name, details: 'Scoop Litter', time: '19:00', completed: false });
+                const groomTask = { id: generateId(), category: 'Grooming ✂️', petName: pet.name, details: 'Scoop Litter', time: '19:00', completed: false };
+                if (!isDuplicate(groomTask)) newTasks.push(groomTask);
             } else if (['hamster', 'sugar glider', 'bird'].includes(type)) {
-                newTasks.push({ id: Date.now() + Math.random(), category: 'Grooming ✂️', petName: pet.name, details: 'Spot Clean Cage', time: '20:00', completed: false });
+                const cleanTask = { id: generateId(), category: 'Grooming ✂️', petName: pet.name, details: 'Spot Clean Cage', time: '20:00', completed: false };
+                if (!isDuplicate(cleanTask)) newTasks.push(cleanTask);
             } else if (type === 'fish') {
-                newTasks.push({ id: Date.now() + Math.random(), category: 'Grooming ✂️', petName: pet.name, details: 'Check Filter', time: '10:00', completed: false });
+                const filterTask = { id: generateId(), category: 'Grooming ✂️', petName: pet.name, details: 'Check Filter', time: '10:00', completed: false };
+                if (!isDuplicate(filterTask)) newTasks.push(filterTask);
             }
         });
 
-        setTasks(prev => [...prev, ...newTasks]);
-        addNotification('Checklist Updated', 'We have added a personalized routine for your pets.');
+        if (newTasks.length > 0) {
+            setTasks(prev => [...prev, ...newTasks]);
+            addNotification('Checklist Updated', `Added ${newTasks.length} new tasks to your routine.`);
+        } else {
+            addNotification('Routine Ready', 'Your daily checklist is already up to date!');
+        }
     };
 
     const progress = tasks.length === 0 ? 0 : Math.round((completedCount / tasks.length) * 100);
@@ -183,15 +241,32 @@ export default function DailyChecklist() {
 
             {/* Add Task Form */}
             <form onSubmit={addTask} className="card" style={{ marginBottom: '2rem', position: 'relative' }}>
-                <button
-                    type="button"
-                    onClick={autoFill}
-                    className="btn"
-                    style={{ position: 'absolute', top: '1rem', right: '1rem', fontSize: '0.8rem', padding: '0.4rem 0.8rem', background: 'var(--surface-highlight)', color: 'var(--primary)', border: '1px solid var(--primary)' }}
-                    suppressHydrationWarning
-                >
-                    ✨ Auto-Plan Day
-                </button>
+                <div style={{ position: 'absolute', top: '1rem', right: '1rem', display: 'flex', gap: '0.5rem' }}>
+                    {tasks.length > 0 && (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (window.confirm('Are you sure you want to clear the entire list?')) {
+                                    setTasks([]);
+                                }
+                            }}
+                            className="btn"
+                            style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', background: '#fee2e2', color: '#dc2626', border: '1px solid #dc2626' }}
+                            suppressHydrationWarning
+                        >
+                            🗑️ Clear
+                        </button>
+                    )}
+                    <button
+                        type="button"
+                        onClick={autoFill}
+                        className="btn"
+                        style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', background: 'var(--surface-highlight)', color: 'var(--primary)', border: '1px solid var(--primary)' }}
+                        suppressHydrationWarning
+                    >
+                        ✨ Auto-Plan Day
+                    </button>
+                </div>
                 <h4 style={{ marginBottom: '1rem', fontWeight: 'bold', color: 'var(--primary)' }}>➕ Add Activity</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, 1fr) 1fr', gap: '1rem', marginBottom: '1rem' }}>
 
@@ -312,15 +387,17 @@ export default function DailyChecklist() {
             </div>
 
             {/* Daily Wisdom Quote */}
-            {tasks.length > 0 && (
-                <div style={{ marginTop: '3rem', textAlign: 'center', padding: '2rem', borderTop: '2px dashed var(--surface-border)' }}>
-                    <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>❝</div>
-                    <p style={{ fontSize: '1.1rem', fontStyle: 'italic', color: 'var(--text-main)', marginBottom: '1rem', lineHeight: '1.6' }}>
-                        {currentQuote}
-                    </p>
-                    <div style={{ fontSize: '1.2rem', marginTop: '1rem', color: 'var(--primary)' }}>❤️</div>
-                </div>
-            )}
-        </div>
+            {
+                tasks.length > 0 && (
+                    <div style={{ marginTop: '3rem', textAlign: 'center', padding: '2rem', borderTop: '2px dashed var(--surface-border)' }}>
+                        <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>❝</div>
+                        <p style={{ fontSize: '1.1rem', fontStyle: 'italic', color: 'var(--text-main)', marginBottom: '1rem', lineHeight: '1.6' }}>
+                            {currentQuote}
+                        </p>
+                        <div style={{ fontSize: '1.2rem', marginTop: '1rem', color: 'var(--primary)' }}>❤️</div>
+                    </div>
+                )
+            }
+        </div >
     );
 }
